@@ -1,0 +1,40 @@
+# Environment
+.env
+.env.local
+
+# SSL certificates and keys
+nginx/certs/
+
+# RAG PDFs (large, copyrighted)
+rag-service/pdfs/
+
+# Archives
+*.zip
+*.tar.gz
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / frontend build
+frontend/node_modules/
+frontend/build/
+
+# SQLite runtime databases
+*.db
+*.sqlite
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Portfolio stuff
+PORTFOLIO.md
+
+# Docker runtime data
+data/
+volumes/

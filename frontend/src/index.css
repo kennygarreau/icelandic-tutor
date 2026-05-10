@@ -1,0 +1,40 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --void:        #07090f;
+  --deep:        #0d1220;
+  --surface:     #131826;
+  --raised:      #1a2235;
+  --border:      #232d45;
+  --ice:         #a8c8e8;
+  --ice-bright:  #cce4f7;
+  --aurora-g:    #3de8a0;
+  --aurora-b:    #38b2e8;
+  --aurora-p:    #9b7fe8;
+  --rune-gold:   #c9a84c;
+  --text-main:   #e8edf5;
+  --text-muted:  #7a8aaa;
+  --error-red:   #e85050;
+  --success:     #3de8a0;
+  --radius:      12px;
+  --transition:  0.2s ease;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--void);
+  color: var(--text-main);
+  font-family: 'Crimson Pro', Georgia, serif;
+  font-size: 17px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--deep); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+button { cursor: pointer; border: none; background: none; font-family: inherit; }
+input, textarea { font-family: inherit; }
