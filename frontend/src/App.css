@@ -245,6 +245,11 @@ input,textarea{font-family:inherit;color:inherit}
 .fc-notes{font-size:.88rem;color:var(--muted);font-style:italic;padding:.5rem .8rem;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--border)}
 .fc-reveal-btn{align-self:flex-start;padding:.5rem 1.2rem;border-radius:20px;border:1px solid var(--ice);color:var(--ice);font-size:.88rem;transition:all var(--tr);font-family:'Crimson Pro',serif}
 .fc-reveal-btn:hover{background:rgba(168,200,232,.1)}
+.fc-pron-row{display:flex;align-items:center;gap:.8rem;margin:.2rem 0}
+.fc-mic-btn{display:flex;align-items:center;gap:.5rem;padding:.45rem 1rem;border-radius:20px;border:1px solid var(--border);background:var(--raised);color:var(--muted);font-size:.85rem;transition:all var(--tr);font-family:'Crimson Pro',serif;user-select:none}
+.fc-mic-btn:hover{border-color:var(--aurora-b);color:var(--aurora-b)}
+.fc-mic-btn.recording{background:rgba(232,80,80,.12);border-color:var(--red);color:var(--red);animation:pulse-red 1s ease-in-out infinite}
+.fc-scoring{font-size:.8rem;color:var(--muted);font-style:italic}
 .fc-actions{display:flex;gap:.8rem;margin-top:.5rem}
 .fc-btn{flex:1;padding:.65rem;border-radius:var(--r);font-size:1rem;display:flex;align-items:center;justify-content:center;gap:.5rem;transition:all var(--tr);font-family:'Crimson Pro',serif;border:1px solid}
 .fc-wrong{border-color:rgba(232,80,80,.4);color:var(--red)}.fc-wrong:hover{background:rgba(232,80,80,.1)}

@@ -819,6 +819,8 @@ function FlashcardsView(){
   const [newIs,setNewIs]=useState('');const [newEn,setNewEn]=useState('');const [newNote,setNewNote]=useState('');const [newCat,setNewCat]=useState('vocabulary');const [newPos,setNewPos]=useState('');
   const [genTopic,setGenTopic]=useState('common greetings and everyday phrases');const [genCount,setGenCount]=useState(10);const [genLevel,setGenLevel]=useState('beginner');const [genLoading,setGenLoading]=useState(false);
   const [reviewIdx,setReviewIdx]=useState(0);const [showAns,setShowAns]=useState(false);const [revResult,setRevResult]=useState(null);
+  const [fcRecording,setFcRecording]=useState(false);const [fcPronScore,setFcPronScore]=useState(null);const [fcScoring,setFcScoring]=useState(false);
+  const fcMediaRecorder=useRef(null);const fcAudioChunks=useRef([]);
   const POS_LABELS=['noun','verb','adjective','adverb','preposition','conjunction','pronoun','phrase','other'];
 
   const loadCards=async()=>{
@@ -838,7 +840,7 @@ function FlashcardsView(){
     setRevResult(correct?'correct':'incorrect');
     await fetch(`${API}/flashcards/${reviewCard.id}/review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:reviewCard.id,correct})});
     setTimeout(()=>{
-      setShowAns(false);setRevResult(null);
+      setShowAns(false);setRevResult(null);setFcPronScore(null);
       if(reviewIdx+1>=dueCards.length){loadCards();setReviewIdx(0);setMode('browse');}
       else setReviewIdx(i=>i+1);
     },700);
@@ -862,6 +864,37 @@ function FlashcardsView(){
   const handleDelete=async(id)=>{
     await fetch(`${API}/flashcards/${id}`,{method:'DELETE'});
     setCards(prev=>prev.filter(c=>c.id!==id));
+  };
+
+  const startFcRecording=async()=>{
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      fcAudioChunks.current=[];
+      fcMediaRecorder.current=new MediaRecorder(stream,{mimeType:'audio/webm'});
+      fcMediaRecorder.current.ondataavailable=e=>{if(e.data.size>0)fcAudioChunks.current.push(e.data);};
+      fcMediaRecorder.current.start();
+      setFcRecording(true);setFcPronScore(null);
+    }catch{alert('Microphone access denied.');}
+  };
+
+  const stopFcRecording=async(expectedText)=>{
+    if(!fcMediaRecorder.current||fcMediaRecorder.current.state==='inactive')return;
+    fcMediaRecorder.current.onstop=async()=>{
+      fcMediaRecorder.current.stream.getTracks().forEach(t=>t.stop());
+      const blob=new Blob(fcAudioChunks.current,{type:'audio/webm'});
+      if(blob.size<500)return;
+      setFcScoring(true);
+      try{
+        const form=new FormData();
+        form.append('audio',blob,'rec.webm');
+        form.append('expected_text',expectedText);
+        const r=await fetch(`${PRONUN}/score`,{method:'POST',body:form});
+        if(r.ok)setFcPronScore(await r.json());
+      }catch(e){console.error('FC pron:',e);}
+      finally{setFcScoring(false);}
+    };
+    fcMediaRecorder.current.stop();
+    setFcRecording(false);
   };
 
   if(loading)return<div className="page-layout"><div className="empty-state">Loading…</div></div>;
@@ -899,17 +932,32 @@ function FlashcardsView(){
                 {reviewCard?.part_of_speech&&<span className="fc-pos">{reviewCard.part_of_speech}</span>}
                 <div className="fc-word-row">
                   <p className="fc-word icelandic">{reviewCard?.icelandic}</p>
-                  <button className="fc-play-btn" onClick={()=>playWord(reviewCard?.icelandic)} title="Pronounce">
+                  <button className="fc-play-btn" onClick={()=>playWord(reviewCard?.icelandic)} title="Listen">
                     <SpeakerIcon/>
                   </button>
                 </div>
+                <div className="fc-pron-row">
+                  <button
+                    className={`fc-mic-btn ${fcRecording?'recording':''}`}
+                    onMouseDown={e=>{e.preventDefault();if(!fcRecording)startFcRecording();}}
+                    onMouseUp={e=>{e.preventDefault();if(fcRecording)stopFcRecording(reviewCard?.icelandic);}}
+                    onTouchStart={e=>{e.preventDefault();if(!fcRecording)startFcRecording();}}
+                    onTouchEnd={e=>{e.preventDefault();if(fcRecording)stopFcRecording(reviewCard?.icelandic);}}
+                    title={fcRecording?'Release to score':'Hold to speak'}
+                  >
+                    {fcRecording?<MicActiveIcon/>:<MicIcon/>}
+                    <span>{fcRecording?'Release…':'Say it'}</span>
+                  </button>
+                  {fcScoring&&<span className="fc-scoring">Scoring…</span>}
+                </div>
+                {fcPronScore&&<PronunciationPanel score={fcPronScore}/>}
                 <button className="fc-reveal-btn" onClick={()=>setShowAns(true)}>Reveal answer</button>
               </div>
               {showAns&&(
                 <div className="fc-back">
                   <div className="fc-word-row">
                     <p className="fc-word icelandic">{reviewCard?.icelandic}</p>
-                    <button className="fc-play-btn" onClick={()=>playWord(reviewCard?.icelandic)} title="Pronounce">
+                    <button className="fc-play-btn" onClick={()=>playWord(reviewCard?.icelandic)} title="Listen">
                       <SpeakerIcon/>
                     </button>
                   </div>
