@@ -815,10 +815,11 @@ function ProgressView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 function FlashcardsView(){
   const [mode,setMode]=useState('browse');const [cards,setCards]=useState([]);const [dueCards,setDueCards]=useState([]);
-  const [loading,setLoading]=useState(true);const [filter,setFilter]=useState('all');
-  const [newIs,setNewIs]=useState('');const [newEn,setNewEn]=useState('');const [newNote,setNewNote]=useState('');const [newCat,setNewCat]=useState('vocabulary');
+  const [loading,setLoading]=useState(true);const [filter,setFilter]=useState('all');const [posFilter,setPosFilter]=useState('all');
+  const [newIs,setNewIs]=useState('');const [newEn,setNewEn]=useState('');const [newNote,setNewNote]=useState('');const [newCat,setNewCat]=useState('vocabulary');const [newPos,setNewPos]=useState('');
   const [genTopic,setGenTopic]=useState('common greetings and everyday phrases');const [genCount,setGenCount]=useState(10);const [genLevel,setGenLevel]=useState('beginner');const [genLoading,setGenLoading]=useState(false);
   const [reviewIdx,setReviewIdx]=useState(0);const [showAns,setShowAns]=useState(false);const [revResult,setRevResult]=useState(null);
+  const POS_LABELS=['noun','verb','adjective','adverb','preposition','conjunction','pronoun','phrase','other'];
 
   const loadCards=async()=>{
     setLoading(true);
@@ -830,7 +831,7 @@ function FlashcardsView(){
   };
   useEffect(()=>{loadCards();},[]);
 
-  const filtered=filter==='all'?cards:cards.filter(c=>c.category===filter);
+  const filtered=cards.filter(c=>(filter==='all'||c.category===filter)&&(posFilter==='all'||c.part_of_speech===posFilter));
   const reviewCard=dueCards[reviewIdx];
 
   const handleReview=async(correct)=>{
@@ -846,8 +847,8 @@ function FlashcardsView(){
   const handleAdd=async(e)=>{
     e.preventDefault();if(!newIs.trim()||!newEn.trim())return;
     await fetch(`${API}/flashcards`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({icelandic:newIs,english:newEn,notes:newNote,category:newCat})});
-    setNewIs('');setNewEn('');setNewNote('');setNewCat('vocabulary');
+      body:JSON.stringify({icelandic:newIs,english:newEn,notes:newNote,category:newCat,part_of_speech:newPos})});
+    setNewIs('');setNewEn('');setNewNote('');setNewCat('vocabulary');setNewPos('');
     loadCards();setMode('browse');
   };
 
@@ -895,6 +896,7 @@ function FlashcardsView(){
               <div className="fc-progress">{reviewIdx+1} / {dueCards.length}</div>
               <div className="fc-front">
                 <span className="fc-category">{reviewCard?.category}</span>
+                {reviewCard?.part_of_speech&&<span className="fc-pos">{reviewCard.part_of_speech}</span>}
                 <div className="fc-word-row">
                   <p className="fc-word icelandic">{reviewCard?.icelandic}</p>
                   <button className="fc-play-btn" onClick={()=>playWord(reviewCard?.icelandic)} title="Pronounce">
@@ -933,6 +935,9 @@ function FlashcardsView(){
           <div className="form-group"><label>Category</label>
             <div className="level-pills">{['vocabulary','grammar','phrase'].map(c=><button type="button" key={c} className={`pill ${newCat===c?'active':''}`} onClick={()=>setNewCat(c)}>{c}</button>)}</div>
           </div>
+          <div className="form-group"><label>Part of speech</label>
+            <div className="level-pills">{POS_LABELS.map(p=><button type="button" key={p} className={`pill ${newPos===p?'active':''}`} onClick={()=>setNewPos(newPos===p?'':p)}>{p}</button>)}</div>
+          </div>
           <div className="form-actions">
             <button type="button" className="pill" onClick={()=>setMode('browse')}>Cancel</button>
             <button type="submit" className="pill active">Save</button>
@@ -965,12 +970,25 @@ function FlashcardsView(){
               </button>
             ))}
           </div>
+          <div className="filter-row">
+            {['all',...POS_LABELS].map(p=>{
+              const cnt=p==='all'?cards.length:cards.filter(c=>c.part_of_speech===p).length;
+              if(p!=='all'&&cnt===0)return null;
+              return(
+                <button key={p} className={`pill ${posFilter===p?'active':''}`} onClick={()=>setPosFilter(p)}>
+                  {p.charAt(0).toUpperCase()+p.slice(1)}
+                  <span className="pill-count">{cnt}</span>
+                </button>
+              );
+            })}
+          </div>
           {filtered.length===0&&<div className="empty-state">No cards yet!</div>}
           <div className="cards-grid">
             {filtered.map(card=>(
               <div key={card.id} className="card-item">
                 <div className="card-item-top">
                   <span className="fc-category">{card.category}</span>
+                  {card.part_of_speech&&<span className="fc-pos">{card.part_of_speech}</span>}
                   <button className="delete-btn" onClick={()=>handleDelete(card.id)}><TrashIcon/></button>
                 </div>
                 <div className="card-is-row">

@@ -155,6 +155,18 @@ def init_db():
             phoneme_tips TEXT
         );
         """)
+        # Migrations
+        try:
+            c.execute("ALTER TABLE flashcards ADD COLUMN part_of_speech TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Deduplicate: keep the oldest card per icelandic word, then enforce uniqueness
+        c.execute("""
+            DELETE FROM flashcards WHERE id NOT IN (
+                SELECT MIN(id) FROM flashcards GROUP BY lower(trim(icelandic))
+            )
+        """)
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_flashcards_icelandic ON flashcards(lower(trim(icelandic)))")
         c.commit()
     logger.info("DB ready.")
 
@@ -650,7 +662,7 @@ RESPONSE FORMAT — always return valid JSON:
   }},
   "difficulty_assessment": "beginner|intermediate|advanced",
   "new_vocabulary": [
-    {{"icelandic":"word","english":"translation","notes":"usage note","category":"vocabulary|grammar|phrase"}}
+    {{"icelandic":"word","english":"translation","notes":"usage note","category":"vocabulary|grammar|phrase","part_of_speech":"noun|verb|adjective|adverb|preposition|conjunction|pronoun|phrase|other"}}
   ],
   "lesson_progress": {{
     "goal_met": false,
@@ -668,7 +680,7 @@ Keep Icelandic responses concise (2-4 sentences).
 
 FLASHCARD_GEN_PROMPT = """Icelandic language expert. Generate {count} flashcards for a {level} learner on: {topic}
 Return ONLY a JSON array, no markdown:
-[{{"icelandic":"...","english":"...","notes":"...","category":"vocabulary|grammar|phrase"}}]
+[{{"icelandic":"...","english":"...","notes":"...","category":"vocabulary|grammar|phrase","part_of_speech":"noun|verb|adjective|adverb|preposition|conjunction|pronoun|phrase|other"}}]
 """
 
 HEATMAP_ANALYSIS_PROMPT = """You are an Icelandic language expert analyzing a student's error patterns.
@@ -894,6 +906,7 @@ class FlashcardCreate(BaseModel):
     icelandic: str; english: str
     notes: Optional[str] = ""
     category: str = "vocabulary"
+    part_of_speech: Optional[str] = ""
 
 class FlashcardGenReq(BaseModel):
     count: int = 10; level: str = "beginner"
@@ -971,12 +984,12 @@ When this material is relevant, naturally reference it in your tip or correction
             if gc not in GRAMMAR_CATEGORIES: gc = "other"
             db.execute("INSERT INTO error_log(session_id,date,error_type,original,correction,explanation,grammar_category) VALUES(?,?,?,?,?,?,?)",
                        (sid,today,gc,err.get("original",""),err.get("correction",""),err.get("explanation",""),gc))
-        # Save vocabulary
+        # Save vocabulary (INSERT OR IGNORE deduplicates on icelandic text)
         due = today
         for v in new_vocab:
             if v.get("icelandic") and v.get("english"):
-                db.execute("INSERT INTO flashcards(icelandic,english,notes,category,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?)",
-                           (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),due,now_iso(),sid))
+                db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
+                           (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),due,now_iso(),sid))
         db.commit()
 
     return {"session_id":sid,"icelandic":data.get("icelandic",""),
@@ -1102,8 +1115,8 @@ When this material is relevant, naturally reference it in your tip or correction
                 GRAMMAR_ERRORS.labels(category=gc).inc()
             for v in new_vocab:
                 if v.get("icelandic") and v.get("english"):
-                    db.execute("INSERT INTO flashcards(icelandic,english,notes,category,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?)",
-                               (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),today,now_iso(),sid))
+                    db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
+                               (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),today,now_iso(),sid))
             db.commit()
 
         yield f'data: {json.dumps({"t":"done","session_id":sid,"icelandic":data.get("icelandic",""),"english_translation":data.get("english_translation",""),"english_correction":correction,"new_vocabulary":new_vocab,"lesson_progress":lp,"mode":req.mode})}\n\n'
@@ -1325,10 +1338,11 @@ def get_pronunciation_history(session_id:Optional[str]=None, limit:int=20):
 # FLASHCARDS (unchanged)
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/flashcards")
-def list_flashcards(due_only:bool=False,category:Optional[str]=None,limit:int=200):
+def list_flashcards(due_only:bool=False,category:Optional[str]=None,pos:Optional[str]=None,limit:int=200):
     q="SELECT * FROM flashcards WHERE 1=1"; p=[]
     if due_only: q+=" AND due_date<=date('now')"
     if category: q+=" AND category=?"; p.append(category)
+    if pos: q+=" AND part_of_speech=?"; p.append(pos)
     q+=" ORDER BY due_date ASC LIMIT ?"; p.append(limit)
     with get_db() as db: rows=db.execute(q,p).fetchall()
     return [dict(r) for r in rows]
@@ -1337,10 +1351,10 @@ def list_flashcards(due_only:bool=False,category:Optional[str]=None,limit:int=20
 def create_flashcard(card:FlashcardCreate):
     due=today_iso()
     with get_db() as db:
-        cur=db.execute("INSERT INTO flashcards(icelandic,english,notes,category,due_date,created_at) VALUES(?,?,?,?,?,?)",
-                       (card.icelandic,card.english,card.notes,card.category,due,now_iso()))
+        cur=db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at) VALUES(?,?,?,?,?,?,?)",
+                       (card.icelandic,card.english,card.notes,card.category,card.part_of_speech,due,now_iso()))
         db.commit()
-        row=db.execute("SELECT * FROM flashcards WHERE id=?",(cur.lastrowid,)).fetchone()
+        row=db.execute("SELECT * FROM flashcards WHERE lower(trim(icelandic))=lower(trim(?))",(card.icelandic,)).fetchone()
     return dict(row)
 
 @app.post("/flashcards/{card_id}/review")
@@ -1374,9 +1388,9 @@ async def generate_flashcards(req:FlashcardGenReq):
     with get_db() as db:
         for c in cards_data:
             if c.get("icelandic") and c.get("english"):
-                cur=db.execute("INSERT INTO flashcards(icelandic,english,notes,category,due_date,created_at) VALUES(?,?,?,?,?,?)",
-                               (c["icelandic"],c["english"],c.get("notes",""),c.get("category","vocabulary"),due,now_iso()))
-                created.append(cur.lastrowid)
+                cur=db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at) VALUES(?,?,?,?,?,?,?)",
+                               (c["icelandic"],c["english"],c.get("notes",""),c.get("category","vocabulary"),c.get("part_of_speech",""),due,now_iso()))
+                if cur.lastrowid: created.append(cur.lastrowid)
         db.commit()
     FLASHCARDS_GEN.labels(level=req.level).inc(len(created))
     return {"created":len(created),"ids":created}
