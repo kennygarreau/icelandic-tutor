@@ -43,9 +43,9 @@ export default function App(){
     {id:'chat',      icon:<ChatIcon/>,  label:'Chat'},
     {id:'scenarios', icon:<SceneIcon/>, label:'Scenarios'},
     {id:'lessons',   icon:<BookIcon/>,  label:'Lessons'},
+    {id:'flashcards',icon:<CardIcon/>,  label:'Cards'},
     {id:'heatmap',   icon:<FireIcon/>,  label:'Heatmap'},
     {id:'progress',  icon:<ChartIcon/>, label:'Progress'},
-    {id:'flashcards',icon:<CardIcon/>,  label:'Cards'},
     {id:'cefr',      icon:<CefrIcon/>,  label:'CEFR'},
   ];
   const goChat=(mode,id)=>{setTab('chat'); setTimeout(()=>launchChat(mode,id),50);};
