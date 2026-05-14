@@ -166,7 +166,7 @@ function ChatView(){
           if(!part.startsWith('data:'))continue;
           try{
             const evt=JSON.parse(part.slice(5).trim());
-            if(evt.t==='token'){
+            if(evt.t==='tok'){
               setMessages(prev=>prev.map(m=>m.id===streamId
                 ?{...m,icelandic:(started?m.icelandic:'')+evt.v,streaming:true}:m));
               started=true;
