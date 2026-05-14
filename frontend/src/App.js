@@ -1059,6 +1059,9 @@ function FlashcardsView(){
   const [reviewIdx,setReviewIdx]=useState(0);const [showAns,setShowAns]=useState(false);const [revResult,setRevResult]=useState(null);
   const [fcRecording,setFcRecording]=useState(false);const [fcPronScore,setFcPronScore]=useState(null);const [fcScoring,setFcScoring]=useState(false);
   const fcMediaRecorder=useRef(null);const fcAudioChunks=useRef([]);
+  const [quizCount,setQuizCount]=useState(10);const [quizQs,setQuizQs]=useState([]);const [quizIdx,setQuizIdx]=useState(0);
+  const [quizSelected,setQuizSelected]=useState(null);const [quizAnswered,setQuizAnswered]=useState(false);
+  const [quizLog,setQuizLog]=useState([]);const [quizState,setQuizState]=useState('start');const [quizLoading,setQuizLoading]=useState(false);
   const POS_LABELS=['noun','verb','adjective','adverb','preposition','conjunction','pronoun','phrase','other'];
 
   const loadCards=async()=>{
@@ -1135,6 +1138,33 @@ function FlashcardsView(){
     setFcRecording(false);
   };
 
+  const startQuiz=async()=>{
+    setQuizLoading(true);
+    try{
+      const data=await fetch(`${API}/flashcards/quiz?count=${quizCount}`).then(r=>r.json());
+      if(data.detail){alert(data.detail);setQuizLoading(false);return;}
+      setQuizQs(data.questions);setQuizIdx(0);setQuizSelected(null);setQuizAnswered(false);setQuizLog([]);setQuizState('active');
+    }catch(e){alert('Failed to load quiz.');}
+    setQuizLoading(false);
+  };
+
+  const handleQuizSelect=(optIdx)=>{
+    if(quizAnswered)return;
+    setQuizSelected(optIdx);setQuizAnswered(true);
+    const q=quizQs[quizIdx];
+    setQuizLog(prev=>[...prev,{card_id:q.card_id,correct:optIdx===q.correct,q,chosen:optIdx}]);
+  };
+
+  const handleQuizNext=()=>{
+    if(quizIdx+1>=quizQs.length){
+      setQuizState('done');
+      const answers=quizLog.map(l=>({card_id:l.card_id,correct:l.correct}));
+      fetch(`${API}/flashcards/quiz/results`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers})}).catch(()=>{});
+    }else{
+      setQuizIdx(i=>i+1);setQuizSelected(null);setQuizAnswered(false);
+    }
+  };
+
   if(loading)return<div className="page-layout"><div className="empty-state">Loading…</div></div>;
 
   return(
@@ -1145,8 +1175,8 @@ function FlashcardsView(){
           <span className="badge">{dueCards.length} due</span>
           <span className="badge badge-muted">{cards.length} total</span>
           <div className="level-pills">
-            {['browse','review','add','generate'].map(m=>(
-              <button key={m} className={`pill ${mode===m?'active':''}`} onClick={()=>{setMode(m);setReviewIdx(0);setShowAns(false);}}>
+            {['browse','review','quiz','add','generate'].map(m=>(
+              <button key={m} className={`pill ${mode===m?'active':''}`} onClick={()=>{setMode(m);setReviewIdx(0);setShowAns(false);if(m==='quiz')setQuizState('start');}}>
                 {m.charAt(0).toUpperCase()+m.slice(1)}
                 {m==='review'&&dueCards.length>0&&<span className="pill-badge">{dueCards.length}</span>}
               </button>
@@ -1209,6 +1239,95 @@ function FlashcardsView(){
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {mode==='quiz'&&(
+        <div className="quiz-area">
+          {quizState==='start'&&(
+            <div className="quiz-start">
+              <div className="quiz-start-icon">?</div>
+              <h3 className="quiz-start-title">Vocabulary Quiz</h3>
+              <p className="quiz-start-desc">Multiple-choice questions drawn from your flashcard deck. Half will ask you to translate English → Icelandic, half Icelandic → English.</p>
+              <div className="quiz-count-row">
+                <span className="quiz-count-label">Questions:</span>
+                {[5,10,20].map(n=>(
+                  <button key={n} className={`pill ${quizCount===n?'active':''}`} onClick={()=>setQuizCount(n)}>{n}</button>
+                ))}
+              </div>
+              {cards.length<4&&<p className="quiz-warn">You need at least 4 flashcards to take a quiz. Generate or add some first.</p>}
+              <button className="pill active quiz-start-btn" onClick={startQuiz} disabled={quizLoading||cards.length<4}>
+                {quizLoading?'Loading…':'Start Quiz'}
+              </button>
+            </div>
+          )}
+          {quizState==='active'&&quizQs.length>0&&(()=>{
+            const q=quizQs[quizIdx];
+            const letters=['A','B','C','D'];
+            return(
+              <div className="quiz-q-card">
+                <div className="quiz-progress-row">
+                  <div className="quiz-progress-bar">
+                    <div className="quiz-progress-fill" style={{width:`${((quizIdx)/quizQs.length)*100}%`}}/>
+                  </div>
+                  <span className="quiz-progress-label">{quizIdx+1} / {quizQs.length}</span>
+                </div>
+                <span className="quiz-direction-badge">{q.direction==='en_to_is'?'EN → IS':'IS → EN'}</span>
+                <p className="quiz-question">{q.question}</p>
+                <div className="quiz-options">
+                  {q.options.map((opt,i)=>{
+                    let cls='quiz-option';
+                    if(quizAnswered){
+                      if(i===q.correct)cls+=' quiz-opt-correct';
+                      else if(i===quizSelected)cls+=' quiz-opt-wrong';
+                    }else if(i===quizSelected)cls+=' quiz-opt-selected';
+                    return(
+                      <button key={i} className={cls} onClick={()=>handleQuizSelect(i)} disabled={quizAnswered}>
+                        <span className="quiz-opt-letter">{letters[i]}</span>
+                        <span className="quiz-opt-text">{opt}</span>
+                        {quizAnswered&&i===q.correct&&<span className="quiz-opt-tick">✓</span>}
+                        {quizAnswered&&i===quizSelected&&i!==q.correct&&<span className="quiz-opt-tick">✗</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                {quizAnswered&&q.notes&&<p className="quiz-note">{q.notes}</p>}
+                {quizAnswered&&(
+                  <button className="pill active quiz-next-btn" onClick={handleQuizNext}>
+                    {quizIdx+1>=quizQs.length?'See Results':'Next →'}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+          {quizState==='done'&&(()=>{
+            const score=quizLog.filter(l=>l.correct).length;
+            const pct=Math.round((score/quizLog.length)*100);
+            return(
+              <div className="quiz-results">
+                <div className="quiz-score-circle" style={{'--pct':pct}}>
+                  <span className="quiz-score-num">{pct}%</span>
+                  <span className="quiz-score-sub">{score}/{quizLog.length}</span>
+                </div>
+                <p className="quiz-score-msg">{pct>=80?'Excellent work!':pct>=60?'Good effort — keep practicing!':'Keep at it — review your cards and try again.'}</p>
+                <div className="quiz-breakdown">
+                  {quizLog.map((l,i)=>(
+                    <div key={i} className={`quiz-br-item ${l.correct?'br-correct':'br-wrong'}`}>
+                      <span className="quiz-br-tick">{l.correct?'✓':'✗'}</span>
+                      <div className="quiz-br-body">
+                        <p className="quiz-br-q">{l.q.question}</p>
+                        {!l.correct&&<p className="quiz-br-ans">Correct: <strong>{l.q.options[l.q.correct]}</strong> · You chose: <em>{l.q.options[l.chosen]}</em></p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="quiz-done-actions">
+                  <button className="pill" onClick={()=>{setQuizState('start');}}>Quiz Again</button>
+                  <button className="pill" onClick={()=>setMode('browse')}>Browse Cards</button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

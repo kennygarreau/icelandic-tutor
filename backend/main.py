@@ -3,7 +3,7 @@ Icelandic Tutor — Backend v3
 New: lesson curriculum, scenario/topic mode, mistake heatmap,
      pronunciation score proxying, error pattern analysis.
 """
-import asyncio, os, json, re, sqlite3, logging, httpx, uuid, time
+import asyncio, os, json, re, sqlite3, logging, httpx, uuid, time, random
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Literal, Optional
@@ -1477,6 +1477,64 @@ def delete_card(card_id:int):
     with get_db() as db:
         db.execute("DELETE FROM flashcards WHERE id=?",(card_id,)); db.commit()
     return {"deleted":card_id}
+
+@app.get("/flashcards/quiz")
+def get_vocab_quiz(count: int = 10):
+    with get_db() as db:
+        all_cards = [dict(r) for r in db.execute(
+            "SELECT id, icelandic, english, notes FROM flashcards ORDER BY RANDOM()"
+        ).fetchall()]
+    if len(all_cards) < 4:
+        raise HTTPException(400, "Need at least 4 flashcards to generate a quiz.")
+    count = min(count, len(all_cards))
+    question_cards = all_cards[:count]
+    questions = []
+    for i, card in enumerate(question_cards):
+        others = [c for c in all_cards if c["id"] != card["id"]]
+        distractors = random.sample(others, min(3, len(others)))
+        if i % 2 == 0:
+            q_text = f"How do you say \"{card['english']}\" in Icelandic?"
+            correct = card["icelandic"]
+            wrongs = [d["icelandic"] for d in distractors]
+        else:
+            q_text = f"What does \"{card['icelandic']}\" mean in English?"
+            correct = card["english"]
+            wrongs = [d["english"] for d in distractors]
+        options = [correct] + wrongs[:3]
+        random.shuffle(options)
+        questions.append({
+            "id": i, "card_id": card["id"],
+            "question": q_text, "options": options,
+            "correct": options.index(correct),
+            "direction": "en_to_is" if i % 2 == 0 else "is_to_en",
+            "icelandic": card["icelandic"], "english": card["english"],
+            "notes": card.get("notes") or "",
+        })
+    return {"questions": questions, "total": len(questions)}
+
+class QuizAnswer(BaseModel):
+    card_id: int
+    correct: bool
+
+class QuizResultsReq(BaseModel):
+    answers: list[QuizAnswer]
+
+@app.post("/flashcards/quiz/results")
+def submit_quiz_results(req: QuizResultsReq):
+    with get_db() as db:
+        for a in req.answers:
+            card = db.execute("SELECT * FROM flashcards WHERE id=?", (a.card_id,)).fetchone()
+            if not card:
+                continue
+            card = dict(card)
+            new_ease, new_interval = sm2(card["ease_factor"], card["interval_days"], a.correct)
+            due = (datetime.now(timezone.utc).date() + timedelta(days=new_interval)).isoformat()
+            db.execute(
+                "UPDATE flashcards SET ease_factor=?,interval_days=?,due_date=?,times_seen=times_seen+1,times_correct=times_correct+? WHERE id=?",
+                (new_ease, new_interval, due, 1 if a.correct else 0, a.card_id)
+            )
+        db.commit()
+    return {"updated": len(req.answers)}
 
 @app.post("/flashcards/generate")
 async def generate_flashcards(req:FlashcardGenReq):
