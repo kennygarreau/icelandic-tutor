@@ -120,9 +120,9 @@ function ChatView(){
   useEffect(()=>{
     _launchChat=(mode,id)=>{
       setChatMode({mode,id,label:''});
-      setMessages([WELCOME_MSG]); setSessionId(null); setPronScore(null); setNewVocab([]); setLessonComplete(null);
+      setMessages(mode==='lesson'?[]:[WELCOME_MSG]); setSessionId(null); setPronScore(null); setNewVocab([]); setLessonComplete(null);
       if(mode==='scenario') fetch(`${API}/scenarios/${id}`).then(r=>r.json()).then(s=>setChatMode(c=>({...c,label:`🎭 ${s.title}`})));
-      if(mode==='lesson')   fetch(`${API}/lessons/${id}`).then(r=>r.json()).then(l=>setChatMode(c=>({...c,label:`📖 ${l.title}`})));
+      if(mode==='lesson')   fetch(`${API}/lessons/${id}`).then(r=>r.json()).then(l=>setChatMode(c=>({...c,label:`📖 ${l.title}`,lessonData:l})));
     };
     return()=>{_launchChat=null;};
   },[]);
@@ -145,6 +145,45 @@ function ChatView(){
 
   // Always-current snapshot — sendMessage reads from here so it needs zero deps
   stateRef.current={messages,level,autoPlay,sessionId,chatMode,speakText};
+
+  const beginLesson=(lessonId,lessonTitle)=>{
+    setChatMode(c=>({...c,mode:'lesson',id:lessonId}));
+    setMessages([]);
+    setLoading(true);setPronScore(null);
+    const streamId=Date.now()+1;
+    const level=stateRef.current.level;
+    fetch(`${API}/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_id:null,messages:[],level,mode:'lesson',lesson_id:lessonId})})
+    .then(async resp=>{
+      if(!resp.ok){setLoading(false);return;}
+      const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let started=false;
+      setMessages([{id:streamId,role:'assistant',icelandic:'',streaming:true}]);
+      while(true){
+        const{done,value}=await reader.read();if(done)break;
+        buf+=decoder.decode(value,{stream:true});
+        const parts=buf.split('\n\n');buf=parts.pop();
+        for(const part of parts){
+          if(!part.startsWith('data:'))continue;
+          try{
+            const evt=JSON.parse(part.slice(5).trim());
+            if(evt.t==='token'){
+              setMessages(prev=>prev.map(m=>m.id===streamId
+                ?{...m,icelandic:(started?m.icelandic:'')+evt.v,streaming:true}:m));
+              started=true;
+            } else if(evt.t==='done'){
+              setMessages(prev=>prev.map(m=>m.id===streamId
+                ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
+                  correction:evt.english_correction,lesson_progress:evt.lesson_progress,streaming:false}:m));
+              if(!stateRef.current.sessionId) setSessionId(evt.session_id);
+              if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
+            }
+          }catch{}
+        }
+      }
+      setMessages(prev=>prev.map(m=>m.id===streamId&&m.streaming?{...m,streaming:false}:m));
+    })
+    .finally(()=>setLoading(false));
+  };
 
   const sendMessage=useCallback(async(text,audioBlob=null)=>{
     const{messages,level,autoPlay,sessionId,chatMode,speakText}=stateRef.current;
@@ -268,7 +307,23 @@ function ChatView(){
           </div>
         </div>
 
-        <WordOfDayCard/>
+        {chatMode.mode==='lesson'&&chatMode.lessonData&&messages.length===0&&!loading&&(
+          <div className="lesson-intro-card">
+            <div className="lic-track">{chatMode.lessonData.track} · lesson {chatMode.lessonData.order}</div>
+            <h2 className="lic-title">{chatMode.lessonData.title}</h2>
+            <p className="lic-grammar"><em>Grammar:</em> {chatMode.lessonData.grammar_focus}</p>
+            <p className="lic-goal"><em>Goal:</em> {chatMode.lessonData.goal}</p>
+            {chatMode.lessonData.vocabulary?.length>0&&(
+              <div className="lic-vocab">
+                {chatMode.lessonData.vocabulary.slice(0,6).map((v,i)=><span key={i} className="vocab-chip">{v}</span>)}
+              </div>
+            )}
+            <button className="lic-begin-btn" onClick={()=>beginLesson(chatMode.id,chatMode.lessonData.title)}>
+              Begin lesson →
+            </button>
+          </div>
+        )}
+        {chatMode.mode==='free'&&<WordOfDayCard/>}
         {lessonComplete&&(
           <div className="lesson-complete-banner">
             <span className="lcb-star">✦</span>
