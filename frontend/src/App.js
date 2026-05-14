@@ -153,7 +153,7 @@ function ChatView(){
     const streamId=Date.now()+1;
     const level=stateRef.current.level;
     fetch(`${API}/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({session_id:null,messages:[],level,mode:'lesson',lesson_id:lessonId})})
+      body:JSON.stringify({session_id:null,messages:[{role:'user',content:'Byrjum!'}],level,mode:'lesson',lesson_id:lessonId})})
     .then(async resp=>{
       if(!resp.ok){setLoading(false);return;}
       const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let started=false;
