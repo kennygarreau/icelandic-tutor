@@ -714,16 +714,26 @@ Return JSON:
 # HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 def now_iso(): return datetime.now(timezone.utc).isoformat()
+
+def extract_json(raw: str) -> str:
+    """Strip think blocks and code fences, then return the first JSON object/array found."""
+    text = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+    # Try to find a JSON object or array anywhere in the response
+    m = re.search(r'(\{.*\}|\[.*\])', text, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    return text
 def today_iso(): return datetime.now(timezone.utc).date().isoformat()
 
 def sm2(ease, interval, correct):
     if correct: return min(2.5, max(1.3, ease+0.1)), max(1, round(interval*ease))
     return max(1.3, ease-0.2), 1
 
-async def call_ollama(messages, system):
+async def call_ollama(messages, system, max_tokens=1500):
     payload = {"model":OLLAMA_MODEL,
                "messages":[{"role":"system","content":system}]+messages,
-               "stream":False}
+               "stream":False,
+               "options":{"num_predict": max_tokens}}
     async with httpx.AsyncClient(timeout=270) as c:
         r = await c.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
         r.raise_for_status()
@@ -738,7 +748,7 @@ async def call_anthropic(messages, system, max_tokens=1500):
         return r.json()["content"][0]["text"]
 
 async def call_llm(messages, system, max_tokens=1500):
-    if LLM_PROVIDER=="ollama": return await call_ollama(messages,system)
+    if LLM_PROVIDER=="ollama": return await call_ollama(messages,system,max_tokens)
     return await call_anthropic(messages,system,max_tokens)
 
 def _unescaped_quote(s):
@@ -800,9 +810,7 @@ async def stream_llm(messages, system):
             yield chunk
 
 def parse_json(raw):
-    clean = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-    clean = clean.lstrip("```json").lstrip("```").rstrip("```").strip()
-    try: return json.loads(clean)
+    try: return json.loads(extract_json(raw))
     except: return {"icelandic":raw,"english_correction":{"errors":[],"positive":"","tip":""},
                     "difficulty_assessment":"beginner","new_vocabulary":[],"lesson_progress":{}}
 
@@ -1475,8 +1483,7 @@ async def generate_flashcards(req:FlashcardGenReq):
     system=FLASHCARD_GEN_PROMPT.format(count=req.count,level=req.level,topic=req.topic)
     try: raw=await call_llm([{"role":"user","content":"Generate now."}],system,2000)
     except Exception as e: raise HTTPException(502,f"LLM error: {e}")
-    clean=raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-    try: cards_data=json.loads(clean)
+    try: cards_data=json.loads(extract_json(raw))
     except: raise HTTPException(502,"Invalid JSON")
     due=today_iso(); created=[]
     with get_db() as db:
@@ -1869,10 +1876,8 @@ async def start_exam(target_level: Optional[str] = None):
     except Exception as e:
         raise HTTPException(502, f"LLM error: {e}")
 
-    clean = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-    clean = clean.lstrip("```json").lstrip("```").rstrip("```").strip()
     try:
-        exam_data = json.loads(clean)
+        exam_data = json.loads(extract_json(raw))
     except:
         raise HTTPException(502, "Invalid exam JSON from LLM")
 
@@ -1932,10 +1937,8 @@ async def submit_exam(exam_id: int, submission: ExamSubmission):
     except Exception as e:
         raise HTTPException(502, f"LLM scoring error: {e}")
 
-    clean = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-    clean = clean.lstrip("```json").lstrip("```").rstrip("```").strip()
     try:
-        result = json.loads(clean)
+        result = json.loads(extract_json(raw))
     except:
         raise HTTPException(502, "Invalid scoring JSON")
 
