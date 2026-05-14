@@ -120,8 +120,8 @@ function ChatView(){
   useEffect(()=>{
     _launchChat=(mode,id)=>{
       setChatMode({mode,id,label:''});
-      setMessages(mode==='lesson'?[]:[WELCOME_MSG]); setSessionId(null); setPronScore(null); setNewVocab([]); setLessonComplete(null);
-      if(mode==='scenario') fetch(`${API}/scenarios/${id}`).then(r=>r.json()).then(s=>setChatMode(c=>({...c,label:`🎭 ${s.title}`})));
+      setMessages((mode==='lesson'||mode==='scenario')?[]:[WELCOME_MSG]); setSessionId(null); setPronScore(null); setNewVocab([]); setLessonComplete(null);
+      if(mode==='scenario') fetch(`${API}/scenarios/${id}`).then(r=>r.json()).then(s=>setChatMode(c=>({...c,label:`🎭 ${s.title}`,scenarioData:s})));
       if(mode==='lesson')   fetch(`${API}/lessons/${id}`).then(r=>r.json()).then(l=>setChatMode(c=>({...c,label:`📖 ${l.title}`,lessonData:l})));
     };
     return()=>{_launchChat=null;};
@@ -154,6 +154,45 @@ function ChatView(){
     const level=stateRef.current.level;
     fetch(`${API}/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({session_id:null,messages:[{role:'user',content:'Byrjum!'}],level,mode:'lesson',lesson_id:lessonId})})
+    .then(async resp=>{
+      if(!resp.ok){setLoading(false);return;}
+      const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let started=false;
+      setMessages([{id:streamId,role:'assistant',icelandic:'',streaming:true}]);
+      while(true){
+        const{done,value}=await reader.read();if(done)break;
+        buf+=decoder.decode(value,{stream:true});
+        const parts=buf.split('\n\n');buf=parts.pop();
+        for(const part of parts){
+          if(!part.startsWith('data:'))continue;
+          try{
+            const evt=JSON.parse(part.slice(5).trim());
+            if(evt.t==='tok'){
+              setMessages(prev=>prev.map(m=>m.id===streamId
+                ?{...m,icelandic:(started?m.icelandic:'')+evt.v,streaming:true}:m));
+              started=true;
+            } else if(evt.t==='done'){
+              setMessages(prev=>prev.map(m=>m.id===streamId
+                ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
+                  correction:evt.english_correction,lesson_progress:evt.lesson_progress,streaming:false}:m));
+              if(!stateRef.current.sessionId) setSessionId(evt.session_id);
+              if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
+            }
+          }catch{}
+        }
+      }
+      setMessages(prev=>prev.map(m=>m.id===streamId&&m.streaming?{...m,streaming:false}:m));
+    })
+    .finally(()=>setLoading(false));
+  };
+
+  const beginScenario=(scenarioId)=>{
+    setChatMode(c=>({...c,mode:'scenario',id:scenarioId}));
+    setMessages([]);
+    setLoading(true);setPronScore(null);
+    const streamId=Date.now()+1;
+    const level=stateRef.current.level;
+    fetch(`${API}/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_id:null,messages:[{role:'user',content:'Byrjum!'}],level,mode:'scenario',scenario_id:scenarioId})})
     .then(async resp=>{
       if(!resp.ok){setLoading(false);return;}
       const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let started=false;
@@ -323,7 +362,24 @@ function ChatView(){
             </button>
           </div>
         )}
+        {chatMode.mode==='scenario'&&chatMode.scenarioData&&messages.length===0&&!loading&&(
+          <div className="lesson-intro-card">
+            <div className="lic-track">{chatMode.scenarioData.category} · {chatMode.scenarioData.level}</div>
+            <h2 className="lic-title">{chatMode.scenarioData.icon} {chatMode.scenarioData.title}</h2>
+            <p className="lic-grammar"><em>Sigríður plays:</em> {chatMode.scenarioData.sigridur_role}</p>
+            <p className="lic-goal">{chatMode.scenarioData.description}</p>
+            {chatMode.scenarioData.vocabulary?.length>0&&(
+              <div className="lic-vocab">
+                {chatMode.scenarioData.vocabulary.slice(0,6).map((v,i)=><span key={i} className="vocab-chip">{v}</span>)}
+              </div>
+            )}
+            <button className="lic-begin-btn" onClick={()=>beginScenario(chatMode.id)}>
+              Begin scenario →
+            </button>
+          </div>
+        )}
         {chatMode.mode==='free'&&<WordOfDayCard/>}
+
         {lessonComplete&&(
           <div className="lesson-complete-banner">
             <span className="lcb-star">✦</span>
