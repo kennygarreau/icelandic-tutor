@@ -777,15 +777,17 @@ function LessonsView({onStart}){
 function HeatmapView(){
   const [data,setData]=useState(null);
   const [analysis,setAnalysis]=useState(null);
+  const [strengths,setStrengths]=useState(null);
   const [loading,setLoading]=useState(true);
-  const [subtab,setSubtab]=useState('heatmap');
+  const [subtab,setSubtab]=useState('mistakes');
   useEffect(()=>{
     Promise.all([
       fetch(`${API}/heatmap`).then(r=>r.json()),
       fetch(`${API}/heatmap/analysis`).then(r=>r.json()),
-    ]).then(([h,a])=>{setData(h);setAnalysis(a);setLoading(false);});
+      fetch(`${API}/heatmap/strengths`).then(r=>r.json()),
+    ]).then(([h,a,s])=>{setData(h);setAnalysis(a);setStrengths(s);setLoading(false);});
   },[]);
-  if(loading)return<div className="page-layout"><div className="empty-state">Analysing your mistakes…</div></div>;
+  if(loading)return<div className="page-layout"><div className="empty-state">Analysing your progress…</div></div>;
   const maxCount=data?Math.max(...Object.values(data.error_map||{}).map(c=>c.count||0),1):1;
   const categories=data?.by_category||{};
   const catKeys=Object.keys(categories).sort((a,b)=>categories[b]-categories[a]);
@@ -794,13 +796,14 @@ function HeatmapView(){
   return(
     <div className="page-layout">
       <div className="page-header">
-        <div><h2 className="page-title">Mistake Heatmap</h2><p className="page-sub">Your error patterns across all sessions</p></div>
+        <div><h2 className="page-title">Performance Heatmap</h2><p className="page-sub">Your patterns across all sessions</p></div>
         <div className="level-pills">
-          <button className={`pill ${subtab==='heatmap'?'active':''}`} onClick={()=>setSubtab('heatmap')}>Heatmap</button>
+          <button className={`pill ${subtab==='mistakes'?'active':''}`} onClick={()=>setSubtab('mistakes')}>Mistakes</button>
+          <button className={`pill ${subtab==='strengths'?'active':''}`} onClick={()=>setSubtab('strengths')}>Strengths</button>
           <button className={`pill ${subtab==='analysis'?'active':''}`} onClick={()=>setSubtab('analysis')}>AI Analysis</button>
         </div>
       </div>
-      {subtab==='heatmap'&&(
+      {subtab==='mistakes'&&(
         <>
           <div className="hm-section">
             <p className="hm-section-title">Error Categories</p>
@@ -886,6 +889,96 @@ function HeatmapView(){
                   <p className="block-label">Recommended Focus Areas</p>
                   <div className="focus-chips">
                     {analysis.recommended_focus.map((f,i)=><span key={i} className="focus-chip">{f}</span>)}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {subtab==='strengths'&&(
+        <div className="strengths-panel">
+          {!strengths&&<div className="empty-state">Loading strengths…</div>}
+          {strengths&&strengths.total_errors===0&&(strengths.mastered_cards?.length||0)===0&&strengths.strong_categories?.length===0&&(
+            <div className="empty-state">Keep practicing! Your strengths will appear here as data builds up.</div>
+          )}
+          {strengths&&(strengths.total_errors>0||(strengths.mastered_cards?.length||0)>0||strengths.strong_categories?.length>0)&&(
+            <>
+              {strengths.praise?.length>0&&(
+                <div className="hm-section">
+                  <p className="hm-section-title">Sigríður's Notes on Your Progress</p>
+                  <div className="strengths-praise-list">
+                    {strengths.praise.slice(0,8).map((p,i)=>(
+                      <div key={i} className="strengths-praise-item">
+                        <span className="strengths-praise-icon">✦</span>
+                        <p className="strengths-praise-text">{p.text||p}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {strengths.strong_categories?.length>0&&(
+                <div className="hm-section">
+                  <p className="hm-section-title">Strong Categories</p>
+                  <div className="strengths-chips">
+                    {strengths.strong_categories.map((c,i)=>(
+                      <span key={i} className="strengths-chip strengths-chip-good">{fmtCat(c)}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {strengths.low_error_categories?.length>0&&(
+                <div className="hm-section">
+                  <p className="hm-section-title">Improving Categories</p>
+                  <div className="strengths-chips">
+                    {strengths.low_error_categories.map((c,i)=>(
+                      <span key={i} className="strengths-chip strengths-chip-ok">{fmtCat(c.category||c)}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {strengths.accuracy_trend?.length>0&&(
+                <div className="hm-section">
+                  <p className="hm-section-title">Error Rate Over Time <span className="hm-legend">(lower is better)</span></p>
+                  <div className="strengths-trend">
+                    {strengths.accuracy_trend.slice(-14).map((pt,i)=>{
+                      const rate=pt.error_rate||0;
+                      const barH=Math.round(rate*100);
+                      const col=rate<0.1?'var(--green)':rate<0.25?'var(--gold)':'var(--red)';
+                      return(
+                        <div key={i} className="trend-col" title={`${pt.date}: ${Math.round(rate*100)}% error rate`}>
+                          <div className="trend-bar-outer">
+                            <div className="trend-bar-inner" style={{height:`${barH}%`,background:col}}/>
+                          </div>
+                          <span className="trend-label">{pt.date?.slice(5)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {(strengths.mastered_cards?.length||0)>0&&(
+                <div className="hm-section">
+                  <p className="hm-section-title">Mastered Vocabulary</p>
+                  <div className="strengths-stat-row">
+                    <div className="strengths-stat">
+                      <span className="strengths-stat-num">{strengths.mastered_cards.length}</span>
+                      <span className="strengths-stat-label">cards mastered</span>
+                    </div>
+                    <div className="strengths-stat">
+                      <span className="strengths-stat-num">{strengths.total_errors}</span>
+                      <span className="strengths-stat-label">errors logged (90 days)</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {strengths.weak_categories?.length>0&&(
+                <div className="hm-section">
+                  <p className="hm-section-title">Still Needs Work</p>
+                  <div className="strengths-chips">
+                    {strengths.weak_categories.map((c,i)=>(
+                      <span key={i} className="strengths-chip strengths-chip-weak">{fmtCat(c.category||c)}</span>
+                    ))}
                   </div>
                 </div>
               )}

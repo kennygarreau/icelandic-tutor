@@ -1299,6 +1299,61 @@ def get_heatmap(days:int=90):
     return {"by_category":by_category,"error_map":error_map,"top_errors":top_errors,
             "total_errors":total_errors,"daily":[dict(r) for r in daily_errors]}
 
+@app.get("/heatmap/strengths")
+def get_heatmap_strengths(days:int=90):
+    window = f"-{days} days"
+    all_cats = ["case_nominative","case_accusative","case_dative","case_genitive",
+                "verb_conjugation","verb_tense","noun_gender","adjective_agreement",
+                "word_order","pronunciation","vocabulary","spelling","other"]
+    with get_db() as db:
+        # Error counts per category
+        cat_counts = {r["grammar_category"]: r["count"] for r in db.execute(
+            "SELECT grammar_category, COUNT(*) as count FROM error_log WHERE date>=date('now',?) GROUP BY grammar_category",
+            (window,)).fetchall()}
+        total_errors = sum(cat_counts.values())
+        # Accuracy trend: error rate per day
+        trend = db.execute("""
+            SELECT p.date, SUM(p.turns) as turns, SUM(p.errors_made) as errors
+            FROM progress p WHERE p.date>=date('now',?)
+            GROUP BY p.date ORDER BY p.date ASC
+        """,(window,)).fetchall()
+        # Positive notes from messages
+        pos_rows = db.execute("""
+            SELECT json_extract(correction,'$.positive') as positive, created_at
+            FROM messages
+            WHERE correction IS NOT NULL
+              AND json_extract(correction,'$.positive') IS NOT NULL
+              AND json_extract(correction,'$.positive') != ''
+            ORDER BY created_at DESC LIMIT 12
+        """).fetchall()
+        # Flashcard mastery
+        mastered = db.execute("""
+            SELECT icelandic, english, times_seen, times_correct
+            FROM flashcards WHERE times_seen >= 3
+            ORDER BY CAST(times_correct AS REAL)/times_seen DESC LIMIT 10
+        """).fetchall()
+
+    strong   = [c for c in all_cats if cat_counts.get(c,0) == 0]
+    low      = [{"category":c,"count":cat_counts[c]} for c in all_cats if 0 < cat_counts.get(c,0) <= 3]
+    weak     = [{"category":c,"count":cat_counts[c]} for c in all_cats if cat_counts.get(c,0) > 3]
+
+    accuracy_trend = [{"date":r["date"],
+                        "error_rate": round(r["errors"]/max(r["turns"],1)*100),
+                        "turns": r["turns"], "errors": r["errors"]}
+                      for r in trend]
+
+    praise = [{"text": r["positive"], "date": r["created_at"][:10]} for r in pos_rows]
+
+    mastered_cards = [{"icelandic":r["icelandic"],"english":r["english"],
+                       "seen":r["times_seen"],"correct":r["times_correct"],
+                       "pct":round(r["times_correct"]/r["times_seen"]*100)}
+                      for r in mastered]
+
+    return {"strong_categories": strong, "low_error_categories": low,
+            "weak_categories": weak, "total_errors": total_errors,
+            "accuracy_trend": accuracy_trend, "praise": praise,
+            "mastered_cards": mastered_cards}
+
 @app.get("/heatmap/analysis")
 async def get_heatmap_analysis(days:int=90):
     """Ask the LLM to analyze error patterns and give recommendations."""

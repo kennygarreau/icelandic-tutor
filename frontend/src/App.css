@@ -250,6 +250,27 @@ input,textarea{font-family:inherit;color:inherit}
 .focus-chips{display:flex;flex-wrap:wrap;gap:.5rem}
 .focus-chip{padding:.3rem .8rem;border-radius:20px;background:rgba(56,178,232,.1);border:1px solid rgba(56,178,232,.25);color:var(--aurora-b);font-size:.83rem}
 
+/* ── Strengths tab ── */
+.strengths-panel{display:flex;flex-direction:column;gap:1rem}
+.strengths-chips{display:flex;flex-wrap:wrap;gap:.5rem}
+.strengths-chip{padding:.3rem .85rem;border-radius:20px;font-size:.83rem;font-weight:500}
+.strengths-chip-good{background:rgba(61,232,160,.12);border:1px solid rgba(61,232,160,.3);color:var(--green)}
+.strengths-chip-ok{background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);color:var(--gold)}
+.strengths-chip-weak{background:rgba(232,80,80,.1);border:1px solid rgba(232,80,80,.3);color:var(--red)}
+.strengths-praise-list{display:flex;flex-direction:column;gap:.5rem}
+.strengths-praise-item{display:flex;gap:.6rem;align-items:flex-start;padding:.6rem .8rem;border-radius:var(--r);background:var(--raised);border:1px solid rgba(61,232,160,.15)}
+.strengths-praise-icon{color:var(--green);font-size:.9rem;flex-shrink:0;margin-top:.1rem}
+.strengths-praise-text{font-size:.88rem;color:var(--text);line-height:1.5;font-style:italic}
+.strengths-trend{display:flex;gap:.35rem;align-items:flex-end;height:100px;padding-bottom:.1rem;overflow-x:auto}
+.trend-col{display:flex;flex-direction:column;align-items:center;gap:.3rem;min-width:32px}
+.trend-bar-outer{width:18px;height:80px;background:var(--raised);border-radius:4px;overflow:hidden;border:1px solid var(--border);display:flex;flex-direction:column;justify-content:flex-end}
+.trend-bar-inner{width:100%;border-radius:4px 4px 0 0;min-height:2px;transition:height .3s}
+.trend-label{font-size:.6rem;color:var(--muted);white-space:nowrap}
+.strengths-stat-row{display:flex;gap:1rem;flex-wrap:wrap}
+.strengths-stat{padding:.9rem 1.2rem;border-radius:var(--r);background:var(--raised);border:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:.2rem;min-width:120px}
+.strengths-stat-num{font-family:'Cinzel',serif;font-size:1.6rem;font-weight:600;color:var(--ice-bright)}
+.strengths-stat-label{font-size:.75rem;color:var(--muted);text-align:center}
+
 /* ── Progress ── */
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem;flex-shrink:0}
 .stat-card{padding:1rem;border-radius:var(--r);border:1px solid var(--border);background:var(--raised);text-align:center}
