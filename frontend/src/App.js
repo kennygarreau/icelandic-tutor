@@ -340,14 +340,19 @@ function ChatView(){
             {sessionId&&!chatMode.label&&<span className="session-badge">Active</span>}
           </div>
           <div className="chat-topbar-right">
-            <div className="level-pills">
-              {LEVELS.map(l=>(
-                <button key={l} className={`pill ${level===l?'active':''}`} onClick={()=>setLevel(l)}>
-                  {l.charAt(0).toUpperCase()+l.slice(1)}
-                </button>
-              ))}
-            </div>
-            <button className="icon-btn" onClick={newSession} title="New session"><PlusIcon/></button>
+            {(!chatMode.mode||chatMode.mode==='free')&&(
+              <div className="topbar-difficulty">
+                <span className="topbar-difficulty-label">Difficulty</span>
+                <div className="level-pills">
+                  {LEVELS.map(l=>(
+                    <button key={l} className={`pill ${level===l?'active':''}`} onClick={()=>setLevel(l)}>
+                      {l.charAt(0).toUpperCase()+l.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button className="new-chat-btn" onClick={newSession} title="Start a new conversation">New Chat</button>
           </div>
         </div>
 
