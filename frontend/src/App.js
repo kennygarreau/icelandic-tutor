@@ -789,6 +789,8 @@ function HeatmapView(){
   const maxCount=data?Math.max(...Object.values(data.error_map||{}).map(c=>c.count||0),1):1;
   const categories=data?.by_category||{};
   const catKeys=Object.keys(categories).sort((a,b)=>categories[b]-categories[a]);
+  const maxCat=Math.max(...catKeys.map(k=>categories[k]),1);
+  const fmtCat=k=>k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
   return(
     <div className="page-layout">
       <div className="page-header">
@@ -805,12 +807,11 @@ function HeatmapView(){
             {catKeys.length===0&&<div className="empty-state">No errors recorded yet. Start practicing!</div>}
             <div className="hm-categories">
               {catKeys.map(cat=>{
-                const maxCat=Math.max(...catKeys.map(k=>categories[k]),1);
                 const pct=Math.round((categories[cat]/maxCat)*100);
                 const heat=pct>75?'heat-5':pct>50?'heat-4':pct>30?'heat-3':pct>15?'heat-2':'heat-1';
                 return(
                   <div key={cat} className="hm-cat-row">
-                    <span className="hm-cat-label">{cat}</span>
+                    <span className="hm-cat-label">{fmtCat(cat)}</span>
                     <div className="hm-bar-outer"><div className={`hm-bar-inner ${heat}`} style={{width:`${pct}%`}}/></div>
                     <span className="hm-cat-count">{categories[cat]}</span>
                   </div>

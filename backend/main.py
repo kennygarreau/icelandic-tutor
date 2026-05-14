@@ -1249,37 +1249,55 @@ def get_progress(days:int=30):
 # ═══════════════════════════════════════════════════════════════════════════════
 @app.get("/heatmap")
 def get_heatmap(days:int=90):
+    window = f"-{days} days"
     with get_db() as db:
-        errors = db.execute("""
-            SELECT grammar_category,COUNT(*) as count,
-                   GROUP_CONCAT(original,'|||') as originals,
-                   GROUP_CONCAT(correction,'|||') as corrections
+        cat_rows = db.execute("""
+            SELECT grammar_category, COUNT(*) as count
             FROM error_log WHERE date>=date('now',?)
             GROUP BY grammar_category ORDER BY count DESC
-        """,(f"-{days} days",)).fetchall()
+        """,(window,)).fetchall()
         total_errors = db.execute(
-            "SELECT COUNT(*) as n FROM error_log WHERE date>=date('now',?)",(f"-{days} days",)).fetchone()["n"]
+            "SELECT COUNT(*) as n FROM error_log WHERE date>=date('now',?)",(window,)).fetchone()["n"]
         daily_errors = db.execute("""
-            SELECT date,grammar_category,COUNT(*) as count
+            SELECT date, grammar_category, COUNT(*) as count
             FROM error_log WHERE date>=date('now',?)
-            GROUP BY date,grammar_category ORDER BY date ASC
-        """,(f"-{days} days",)).fetchall()
-    categories = []
-    for row in errors:
-        r = dict(row)
-        pct = round(r["count"]/total_errors*100) if total_errors else 0
-        origs = (r["originals"] or "").split("|||")[:3]
-        corrs = (r["corrections"] or "").split("|||")[:3]
-        examples = [{"original":o,"correction":c} for o,c in zip(origs,corrs) if o]
-        categories.append({
-            "category": r["grammar_category"],
-            "display_name": r["grammar_category"].replace("_"," ").title(),
-            "count": r["count"],
-            "percentage": pct,
-            "examples": examples,
-        })
-    return {"categories":categories,"total_errors":total_errors,
-            "daily":[dict(r) for r in daily_errors]}
+            GROUP BY date, grammar_category ORDER BY date ASC
+        """,(window,)).fetchall()
+        # error_map: group by (original, correction) pair for the grid
+        pair_rows = db.execute("""
+            SELECT original, correction, grammar_category, COUNT(*) as count,
+                   MAX(explanation) as explanation
+            FROM error_log WHERE date>=date('now',?)
+              AND original IS NOT NULL AND original != ''
+            GROUP BY lower(trim(original)), lower(trim(correction))
+            ORDER BY count DESC LIMIT 60
+        """,(window,)).fetchall()
+        # top_errors: same data, top 10 with explanation
+        top_rows = db.execute("""
+            SELECT original, correction, grammar_category, COUNT(*) as count,
+                   MAX(explanation) as explanation
+            FROM error_log WHERE date>=date('now',?)
+              AND original IS NOT NULL AND original != ''
+            GROUP BY lower(trim(original)), lower(trim(correction))
+            ORDER BY count DESC LIMIT 10
+        """,(window,)).fetchall()
+
+    # by_category: plain dict expected by frontend bar chart
+    by_category = {r["grammar_category"]: r["count"] for r in cat_rows}
+
+    # error_map: dict keyed by "original|||correction" for the grid
+    error_map = {}
+    for r in pair_rows:
+        key = f"{r['original']}|||{r['correction']}"
+        error_map[key] = {"original": r["original"], "correction": r["correction"],
+                          "category": r["grammar_category"], "count": r["count"]}
+
+    top_errors = [{"original":r["original"],"correction":r["correction"],
+                   "category":r["grammar_category"],"count":r["count"],
+                   "explanation":r["explanation"] or ""} for r in top_rows]
+
+    return {"by_category":by_category,"error_map":error_map,"top_errors":top_errors,
+            "total_errors":total_errors,"daily":[dict(r) for r in daily_errors]}
 
 @app.get("/heatmap/analysis")
 async def get_heatmap_analysis(days:int=90):
