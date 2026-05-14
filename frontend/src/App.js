@@ -793,6 +793,21 @@ function HeatmapView(){
   const catKeys=Object.keys(categories).sort((a,b)=>categories[b]-categories[a]);
   const maxCat=Math.max(...catKeys.map(k=>categories[k]),1);
   const fmtCat=k=>k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  const CAT_TIPS={
+    case_nominative:"Nominative case — the subject of a sentence.\ne.g. Hundurinn (the dog) er stór.",
+    case_accusative:"Accusative case — the direct object.\ne.g. Ég sé hundinn (I see the dog).",
+    case_dative:"Dative case — indirect object or with certain prepositions/verbs.\ne.g. Ég gef hundinum mat (I give the dog food).",
+    case_genitive:"Genitive case — possession or 'of' relationships.\ne.g. Hundur Jóns (Jón's dog).",
+    verb_conjugation:"Verb conjugation — matching the verb ending to person & number.\ne.g. ég er / þú ert / hann er.",
+    verb_tense:"Verb tense — past, present, or future form.\ne.g. ég tala (I speak) vs. ég talaði (I spoke).",
+    noun_gender:"Noun gender — Icelandic has masculine, feminine, neuter.\ne.g. hestur (m.), kona (f.), barn (n.).",
+    adjective_agreement:"Adjective agreement — adjectives must match noun gender, number & case.\ne.g. stór hestur / stórt barn / stóra konu.",
+    word_order:"Word order — Icelandic uses V2 (verb second) and inversion after fronting.\ne.g. Í gær fór ég (Yesterday I went, not *Í gær ég fór).",
+    pronunciation:"Pronunciation — Icelandic-specific sounds like þ, ð, æ, ll, rl, double consonants.",
+    vocabulary:"Vocabulary — using the correct word or choosing between similar words.",
+    spelling:"Spelling — accent marks, double letters, and other orthographic rules.",
+    other:"Other — errors that don't fall neatly into a specific grammar category.",
+  };
   return(
     <div className="page-layout">
       <div className="page-header">
@@ -922,7 +937,7 @@ function HeatmapView(){
                   <p className="hm-section-title">Strong Categories</p>
                   <div className="strengths-chips">
                     {strengths.strong_categories.map((c,i)=>(
-                      <span key={i} className="strengths-chip strengths-chip-good">{fmtCat(c)}</span>
+                      <span key={i} className="strengths-chip strengths-chip-good" title={CAT_TIPS[c]||fmtCat(c)}>{fmtCat(c)}</span>
                     ))}
                   </div>
                 </div>
@@ -932,7 +947,7 @@ function HeatmapView(){
                   <p className="hm-section-title">Improving Categories</p>
                   <div className="strengths-chips">
                     {strengths.low_error_categories.map((c,i)=>(
-                      <span key={i} className="strengths-chip strengths-chip-ok">{fmtCat(c.category||c)}</span>
+                      <span key={i} className="strengths-chip strengths-chip-ok" title={CAT_TIPS[c.category||c]||fmtCat(c.category||c)}>{fmtCat(c.category||c)}</span>
                     ))}
                   </div>
                 </div>
@@ -977,7 +992,7 @@ function HeatmapView(){
                   <p className="hm-section-title">Still Needs Work</p>
                   <div className="strengths-chips">
                     {strengths.weak_categories.map((c,i)=>(
-                      <span key={i} className="strengths-chip strengths-chip-weak">{fmtCat(c.category||c)}</span>
+                      <span key={i} className="strengths-chip strengths-chip-weak" title={CAT_TIPS[c.category||c]||fmtCat(c.category||c)}>{fmtCat(c.category||c)}</span>
                     ))}
                   </div>
                 </div>
