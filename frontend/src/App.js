@@ -110,6 +110,7 @@ function ChatView(){
   const [chatMode,  setChatMode]  = useState({mode:'free',id:null,label:''});
   const [pronScore, setPronScore] = useState(null);
   const [shownTranslations, setShownTranslations] = useState({});
+  const [lessonComplete, setLessonComplete] = useState(null);
 
   const chatEndRef     = useRef(null);
   const inputRef       = useRef(null);
@@ -119,7 +120,7 @@ function ChatView(){
   useEffect(()=>{
     _launchChat=(mode,id)=>{
       setChatMode({mode,id,label:''});
-      setMessages([WELCOME_MSG]); setSessionId(null); setPronScore(null); setNewVocab([]);
+      setMessages([WELCOME_MSG]); setSessionId(null); setPronScore(null); setNewVocab([]); setLessonComplete(null);
       if(mode==='scenario') fetch(`${API}/scenarios/${id}`).then(r=>r.json()).then(s=>setChatMode(c=>({...c,label:`🎭 ${s.title}`})));
       if(mode==='lesson')   fetch(`${API}/lessons/${id}`).then(r=>r.json()).then(l=>setChatMode(c=>({...c,label:`📖 ${l.title}`})));
     };
@@ -207,6 +208,7 @@ function ChatView(){
               ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
                 correction:evt.english_correction,lesson_progress:evt.lesson_progress,streaming:false}
               :m));
+            if(evt.lesson_just_completed) setLessonComplete(stateRef.current.chatMode);
             if(autoPlay) speakText(evt.icelandic,streamId);
           } else if(evt.t==='error'){
             setMessages(prev=>[...prev,{id:Date.now(),role:'error',text:evt.msg}]);
@@ -267,6 +269,16 @@ function ChatView(){
         </div>
 
         <WordOfDayCard/>
+        {lessonComplete&&(
+          <div className="lesson-complete-banner">
+            <span className="lcb-star">✦</span>
+            <div className="lcb-text">
+              <strong>Lesson complete!</strong>
+              <span>{lessonComplete.label?.replace('📖 ','')}</span>
+            </div>
+            <button className="lcb-dismiss" onClick={()=>setLessonComplete(null)}>✕</button>
+          </div>
+        )}
         <div className="messages">
           {messages.map(msg=>(
             <div key={msg.id} className={`msg msg-${msg.role}`}>
@@ -584,17 +596,15 @@ function LessonsView({onStart}){
   const [completed,setCompleted]=useState({});
   const [track,setTrack]=useState('beginner');
   const [loading,setLoading]=useState(true);
-  useEffect(()=>{
-    Promise.all([
-      fetch(`${API}/lessons`).then(r=>r.json()),
-      fetch(`${API}/progress`).then(r=>r.json()),
-    ]).then(([ls,prog])=>{
+  const loadLessons=()=>{
+    fetch(`${API}/lessons`).then(r=>r.json()).then(ls=>{
       setLessons(ls);
-      const comp={};(prog.completed_lessons||[]).forEach(id=>{comp[id]=true;});
+      const comp={};ls.forEach(l=>{if(l.completed)comp[l.id]=true;});
       setCompleted(comp);setLoading(false);
     });
-  },[]);
-  const tracks=['beginner','intermediate','advanced'];
+  };
+  useEffect(()=>{loadLessons();},[]);
+  const tracks=['beginner','intermediate','advanced','cultural'];
   const filtered=lessons.filter(l=>l.track===track).sort((a,b)=>a.order-b.order);
   return(
     <div className="page-layout">
@@ -625,13 +635,16 @@ function LessonsView({onStart}){
                 </div>
                 <p className="lesson-desc">{l.description}</p>
                 <p className="lesson-grammar">Grammar: <em>{l.grammar_focus}</em></p>
+                <p className="lesson-goal">Goal: {l.goal}</p>
                 <div className="lesson-vocab">
                   {l.vocabulary?.slice(0,5).map((v,i)=><span key={i} className="vocab-chip">{v}</span>)}
                 </div>
-                {avail&&(
+                {avail?(
                   <button className="launch-btn" onClick={()=>onStart(l.id)}>
                     {done?'Practice again →':'Start lesson →'}
                   </button>
+                ):(
+                  <p className="lesson-locked-hint">Complete {filtered[idx-1]?.title} to unlock</p>
                 )}
               </div>
             </div>

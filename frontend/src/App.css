@@ -177,7 +177,13 @@ input,textarea{font-family:inherit;color:inherit}
 .lesson-desc{font-size:.88rem;color:var(--muted)}
 .lesson-grammar{font-size:.82rem;color:var(--muted)}
 .lesson-grammar em{color:var(--aurora-b);font-style:normal}
+.lesson-goal{font-size:.82rem;color:var(--muted);font-style:italic;margin-top:.1rem}
+.lesson-locked-hint{font-size:.78rem;color:var(--muted);opacity:.7;margin-top:.5rem;font-style:italic}
 .lesson-vocab{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.15rem}
+.lesson-complete-banner{display:flex;align-items:center;gap:.8rem;padding:.75rem 1rem;margin:.5rem 1rem;border-radius:var(--r);background:rgba(61,232,160,.08);border:1px solid rgba(61,232,160,.35);animation:fadeIn .3s ease}
+.lcb-star{font-size:1.3rem;color:var(--aurora-g);flex-shrink:0}
+.lcb-text{display:flex;flex-direction:column;flex:1;gap:.1rem}.lcb-text strong{color:var(--aurora-g);font-family:'Cinzel',serif;font-size:.85rem;letter-spacing:.05em}.lcb-text span{font-size:.82rem;color:var(--muted)}
+.lcb-dismiss{color:var(--muted);font-size:.9rem;padding:.2rem .4rem;border-radius:4px;transition:color var(--tr);flex-shrink:0}.lcb-dismiss:hover{color:var(--ice)}
 .days-toggle{display:flex;gap:.4rem}
 
 /* ── Heatmap ── */

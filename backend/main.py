@@ -666,7 +666,8 @@ RESPONSE FORMAT — always return valid JSON:
   ],
   "lesson_progress": {{
     "goal_met": false,
-    "goal_progress": "short note on how close to lesson goal (if in lesson mode)"
+    "goal_percent": 0,
+    "goal_note": "one short sentence on how close to the lesson goal (only in lesson mode)"
   }}
 }}
 
@@ -818,7 +819,7 @@ def build_system_prompt(mode, scenario_id, lesson_id, level):
             system += f"\n\nLESSON MODE — {ls['title']}\nGrammar focus: {ls['grammar_focus']}\n"
             system += f"Lesson goal: {ls['goal']}\n{ls['system_addon']}\n"
             system += f"Key vocabulary: {', '.join(ls['vocabulary'])}\n"
-            system += "\nTrack goal_progress carefully in your lesson_progress JSON field."
+            system += "\nTrack goal_percent (0-100) and set goal_met=true when the student has achieved the lesson goal."
     system += f"\n\n[Student level: {level}]"
     return system
 
@@ -990,6 +991,14 @@ When this material is relevant, naturally reference it in your tip or correction
             if v.get("icelandic") and v.get("english"):
                 db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
                            (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),due,now_iso(),sid))
+        # Auto-complete lesson when goal met
+        lesson_just_completed = False
+        if req.mode=="lesson" and req.lesson_id and lp.get("goal_met"):
+            already = db.execute("SELECT id FROM lesson_progress WHERE lesson_id=? AND completed=1",(req.lesson_id,)).fetchone()
+            if not already:
+                db.execute("INSERT INTO lesson_progress(lesson_id,completed,score,completed_at,session_id) VALUES(?,1,100,?,?)",
+                           (req.lesson_id,now_iso(),sid))
+                lesson_just_completed = True
         db.commit()
 
     return {"session_id":sid,"icelandic":data.get("icelandic",""),
@@ -997,6 +1006,7 @@ When this material is relevant, naturally reference it in your tip or correction
             "english_correction":correction,
             "difficulty_assessment":data.get("difficulty_assessment",req.level),
             "new_vocabulary":new_vocab,"lesson_progress":lp,
+            "lesson_just_completed":lesson_just_completed,
             "mode":req.mode}
 
 @app.post("/chat/stream")
@@ -1117,9 +1127,17 @@ When this material is relevant, naturally reference it in your tip or correction
                 if v.get("icelandic") and v.get("english"):
                     db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
                                (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),today,now_iso(),sid))
+            # Auto-complete lesson when goal met
+            lesson_just_completed = False
+            if req.mode=="lesson" and req.lesson_id and lp.get("goal_met"):
+                already = db.execute("SELECT id FROM lesson_progress WHERE lesson_id=? AND completed=1",(req.lesson_id,)).fetchone()
+                if not already:
+                    db.execute("INSERT INTO lesson_progress(lesson_id,completed,score,completed_at,session_id) VALUES(?,1,100,?,?)",
+                               (req.lesson_id,now_iso(),sid))
+                    lesson_just_completed = True
             db.commit()
 
-        yield f'data: {json.dumps({"t":"done","session_id":sid,"icelandic":data.get("icelandic",""),"english_translation":data.get("english_translation",""),"english_correction":correction,"new_vocabulary":new_vocab,"lesson_progress":lp,"mode":req.mode})}\n\n'
+        yield f'data: {json.dumps({"t":"done","session_id":sid,"icelandic":data.get("icelandic",""),"english_translation":data.get("english_translation",""),"english_correction":correction,"new_vocabulary":new_vocab,"lesson_progress":lp,"lesson_just_completed":lesson_just_completed,"mode":req.mode})}\n\n'
 
     return StreamingResponse(
         generate(),
@@ -1220,8 +1238,11 @@ def get_progress(days:int=30):
         cards_total = db.execute("SELECT COUNT(*) as n FROM flashcards").fetchone()["n"]
         cards_due   = db.execute("SELECT COUNT(*) as n FROM flashcards WHERE due_date<=date('now')").fetchone()["n"]
         lessons_done = db.execute("SELECT COUNT(DISTINCT lesson_id) as n FROM lesson_progress WHERE completed=1").fetchone()["n"]
+        completed_lessons = [r["lesson_id"] for r in db.execute(
+            "SELECT DISTINCT lesson_id FROM lesson_progress WHERE completed=1").fetchall()]
     return {"daily":[dict(r) for r in daily],"totals":dict(totals),
-            "cards_total":cards_total,"cards_due":cards_due,"lessons_completed":lessons_done}
+            "cards_total":cards_total,"cards_due":cards_due,
+            "lessons_completed":lessons_done,"completed_lessons":completed_lessons}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HEATMAP / ERROR ANALYSIS
