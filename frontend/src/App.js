@@ -19,6 +19,8 @@ function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
 
 let _launchChat = null;
 function launchChat(mode,id){_launchChat?.(mode,id);}
+let _goToTab = null;
+function goToTab(id){_goToTab?.(id);}
 
 const playWord=async(text)=>{
   try{
@@ -43,12 +45,14 @@ export default function App(){
     {id:'chat',      icon:<ChatIcon/>,  label:'Chat'},
     {id:'scenarios', icon:<SceneIcon/>, label:'Scenarios'},
     {id:'lessons',   icon:<BookIcon/>,  label:'Lessons'},
-    {id:'flashcards',icon:<CardIcon/>,  label:'Cards'},
-    {id:'heatmap',   icon:<FireIcon/>,  label:'Heatmap'},
+    {id:'flashcards',   icon:<CardIcon/>,   label:'Cards'},
+    {id:'pronunciation',icon:<PronIcon/>,  label:'Pronunciation'},
+    {id:'heatmap',      icon:<FireIcon/>,  label:'Heatmap'},
     {id:'progress',  icon:<ChartIcon/>, label:'Progress'},
     {id:'cefr',      icon:<CefrIcon/>,  label:'CEFR'},
   ];
   const goChat=(mode,id)=>{setTab('chat'); setTimeout(()=>launchChat(mode,id),50);};
+  useEffect(()=>{_goToTab=setTab;return()=>{_goToTab=null;};},[]);
 
   useEffect(()=>{
     const nav=document.getElementById('bottom-nav');
@@ -78,6 +82,7 @@ export default function App(){
         {tab==='chat'       && <ChatView/>}
         {tab==='scenarios'  && <ScenariosView onStart={(id)=>goChat('scenario',id)}/>}
         {tab==='lessons'    && <LessonsView   onStart={(id)=>goChat('lesson',id)}/>}
+        {tab==='pronunciation' && <PronunciationView/>}
         {tab==='heatmap'    && <HeatmapView/>}
         {tab==='progress'   && <ProgressView/>}
         {tab==='flashcards' && <FlashcardsView/>}
@@ -496,7 +501,7 @@ function ChatView(){
           </div>
         )}
         <div className="phoneme-footer">
-          <p className="footer-label">Pronunciation</p>
+          <button className="footer-label footer-label-link" onClick={()=>goToTab('pronunciation')}>Pronunciation ›</button>
           <div className="phoneme-grid">
             {[['þ','th in "think"'],['ð','th in "this"'],['æ','eye'],['ö','u in "burn"'],
               ['á','ow in "cow"'],['í/ý','ee'],['ú','oo'],['é','ye']].map(([ch,hint])=>(
@@ -1585,6 +1590,125 @@ useEffect(()=>{
 // ═══════════════════════════════════════════════════════════════════════════════
 // ICONS
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRONUNCIATION GUIDE
+// ═══════════════════════════════════════════════════════════════════════════════
+const PRON_DATA = {
+  vowels: {
+    title: 'Vowels',
+    rows: [
+      ['Á á', 'ow in "cow"',       'ár (year)',     'á = open back, not "ah"'],
+      ['É é', 'ye in "yes"',       'él (sleet)',    'starts with a y-glide'],
+      ['Í í', 'ee in "feet"',      'ís (ice)',      'same as English "ee", held longer'],
+      ['Ó ó', 'oh — rounded',      'ós (estuary)',  'rounder/tenser than English "oh"'],
+      ['Ú ú', 'oo in "food"',      'úr (drizzle)',  'pure vowel, no glide'],
+      ['Ý ý', 'ee in "feet"',      'ýr (yew)',      'identical to Í'],
+      ['Æ æ', 'eye',               'æðr (vein)',    'pure diphthong, one syllable'],
+      ['Ö ö', 'u in "burn"',       'öld (age)',     'rounded front vowel; purse lips and say "e"'],
+    ],
+  },
+  consonants: {
+    title: 'Special Consonants',
+    rows: [
+      ['Þ þ', 'th in "think"',     'þing (parliament)',  'voiceless — tongue between teeth, no buzz'],
+      ['Ð ð', 'th in "this"',      'að (to)',             'voiced — tongue between teeth, with buzz'],
+      ['G g',  'y before e/i',     'gegn (against)',      'soft g (like "y") before e, i, j'],
+      ['J j',  'y in "yes"',       'já (yes)',            'always a "y" sound, never like English j'],
+      ['R r',  'rolled/trilled',   'rauður (red)',        'tip of tongue taps the ridge behind top teeth'],
+      ['S s',  'always sharp s',   'sama (same)',         'never buzzes like z'],
+      ['X x',  'ks',               'sex (six)',           'always "ks", never "gz"'],
+    ],
+  },
+  clusters: {
+    title: 'Consonant Clusters',
+    rows: [
+      ['LL',   'voiceless lateral — "tl" with a hiss',  'fjall (mountain)',   'unique to Icelandic/Welsh; tongue sides, air rushes past'],
+      ['RL',   'like "rdl"',                             'karl (man)',         'r colours the l into a retroflex'],
+      ['RN',   'like "rdn"',                             'barn (child)',       'r colours the n; slightly nasal'],
+      ['HV',   'kv',                                     'hvað (what)',        'written hv, always said "kv" in modern Icelandic'],
+      ['GJ',   'y in "yes"',                             'gjöf (gift)',        'the g is silent; only the j/y sound remains'],
+      ['KJ',   'ch — soft palate',                       'kjöt (meat)',        'like "ch" in German "ich"'],
+      ['FN/FJ','bn / bv',                                'fnykur (stench)',    'f becomes voiced b before n or j'],
+      ['NG',   'ng-g (both sounded)',                    'ungur (young)',      'unlike English "sing" — both n and g are audible'],
+      ['NN',   'nasalised / long n',                     'kanna (jug)',        'held longer than a single n'],
+    ],
+  },
+  aspiration: {
+    title: 'Pre-aspiration',
+    desc: 'Icelandic double stops (pp, tt, kk) have a noticeable breath (h-sound) BEFORE the stop, not after. This is the opposite of English.',
+    rows: [
+      ['pp', 'h+p — "ahp"', 'uppá (upon)',    'breathe out before the p'],
+      ['tt', 'h+t — "aht"', 'köttur (cat)',   'the double-t sounds like "ht"'],
+      ['kk', 'h+k — "ahk"', 'ekki (not)',     'breathe out before the k'],
+      ['bb', 'pre-voiced',  'sabbat',         'voiced counterpart, softer'],
+    ],
+  },
+  stress: {
+    title: 'Stress & Rhythm',
+    rows: [
+      ['Stress', 'Always on the first syllable', 'ÍS-lenska, KEN-nari, HALL-ó',  'no exceptions in native words'],
+      ['Vowel length', 'Stressed vowels are long before one consonant', 'fara (faa-ra)',  'short before two consonants: barn (b-a-rn)'],
+      ['Intonation', 'Relatively flat, falling at end of sentence', '—',  'avoid rising intonation on statements (sounds like a question)'],
+    ],
+  },
+};
+
+function PronunciationView(){
+  const sections = ['vowels','consonants','clusters','aspiration','stress'];
+  const [active, setActive] = useState('vowels');
+  const sec = PRON_DATA[active];
+  return(
+    <div className="page-layout">
+      <div className="page-header">
+        <div><h2 className="page-title">Pronunciation Guide</h2><p className="page-sub">Icelandic sounds that don't exist in English</p></div>
+      </div>
+      <div className="pron-nav">
+        {sections.map(s=>(
+          <button key={s} className={`pill ${active===s?'active':''}`} onClick={()=>setActive(s)}>
+            {PRON_DATA[s].title}
+          </button>
+        ))}
+      </div>
+      {sec.desc&&<p className="pron-section-desc">{sec.desc}</p>}
+      <div className="pron-table-wrap">
+        <table className="pron-table">
+          <thead>
+            <tr>
+              <th>Letter / Pattern</th>
+              <th>Sounds Like</th>
+              <th>Example</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sec.rows.map(([letter,sounds,example,note],i)=>(
+              <tr key={i}>
+                <td><span className="pron-letter">{letter}</span></td>
+                <td className="pron-sounds">{sounds}</td>
+                <td>
+                  <span className="pron-example icelandic">{example.split(' ')[0]}</span>
+                  {' '}<span className="pron-example-en">{example.split(' ').slice(1).join(' ')}</span>
+                </td>
+                <td className="pron-note">{note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="pron-tip-box">
+        <span className="pron-tip-icon">✦</span>
+        <p className="pron-tip-text">
+          {active==='vowels'&&'Icelandic vowels are pure — they don\'t glide into another sound the way English vowels do. Á (like "cow") and Æ ("eye") are the most common surprises.'}
+          {active==='consonants'&&'Þ and Ð look exotic but you already know both sounds from English "think" and "this". The rolled R and soft G are the trickiest to acquire.'}
+          {active==='clusters'&&'LL is the most distinctively Icelandic sound — practice "at-l" with the air escaping around your tongue rather than over it. HV→KV is a consistent rule with no exceptions.'}
+          {active==='aspiration'&&'Pre-aspiration is what makes Icelandic sound so distinctive. In English we breathe OUT after stops; in Icelandic the breath comes BEFORE. Listen for it in "köttur" and "ekki".'}
+          {active==='stress'&&'First-syllable stress is absolute in Icelandic — even foreign loanwords get shifted. This gives the language its characteristic rhythm and is easy to learn as a rule.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const ChatIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
 const SceneIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 const BookIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
@@ -1598,4 +1722,5 @@ const MicActiveIcon=()=><svg viewBox="0 0 24 24" fill="currentColor" width="20" 
 const SendIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>;
 const PlusIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
 const CefrIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>;
+const PronIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>;
 const TrashIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>;

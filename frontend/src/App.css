@@ -105,6 +105,7 @@ input,textarea{font-family:inherit;color:inherit}
 .vocab-is{font-style:italic;color:var(--ice-bright);font-weight:600}.vocab-en{color:var(--muted);font-size:.88rem}.vocab-note{width:100%;font-size:.8rem;color:var(--muted);font-style:italic}
 .phoneme-footer{margin-top:auto;padding:.8rem 1.1rem 1.2rem;border-top:1px solid var(--border)}
 .footer-label{font-family:'Cinzel',serif;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem}
+.footer-label-link{background:none;border:none;cursor:pointer;transition:color var(--tr);padding:0;text-align:left}.footer-label-link:hover{color:var(--aurora-b)}
 .phoneme-grid{display:grid;grid-template-columns:1fr 1fr;gap:.35rem}
 .phoneme{display:flex;align-items:baseline;gap:.4rem;padding:.25rem .45rem;background:var(--raised);border-radius:6px;border:1px solid var(--border)}
 .ph-char{font-family:'Cinzel',serif;font-size:.95rem;color:var(--gold);min-width:1.3rem}.ph-hint{font-size:.75rem;color:var(--muted)}
@@ -192,6 +193,25 @@ input,textarea{font-family:inherit;color:inherit}
 .lcb-text{display:flex;flex-direction:column;flex:1;gap:.1rem}.lcb-text strong{color:var(--aurora-g);font-family:'Cinzel',serif;font-size:.85rem;letter-spacing:.05em}.lcb-text span{font-size:.82rem;color:var(--muted)}
 .lcb-dismiss{color:var(--muted);font-size:.9rem;padding:.2rem .4rem;border-radius:4px;transition:color var(--tr);flex-shrink:0}.lcb-dismiss:hover{color:var(--ice)}
 .days-toggle{display:flex;gap:.4rem}
+
+/* ── Pronunciation Guide ── */
+.pron-nav{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}
+.pron-section-desc{font-size:.88rem;color:var(--muted);margin-bottom:.8rem;padding:.6rem .9rem;background:rgba(56,178,232,.06);border-radius:var(--r);border-left:2px solid var(--aurora-b)}
+.pron-table-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
+.pron-table{width:100%;border-collapse:collapse;font-size:.88rem}
+.pron-table thead tr{background:rgba(255,255,255,.04)}
+.pron-table th{padding:.6rem .9rem;text-align:left;font-family:'Cinzel',serif;font-size:.68rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap}
+.pron-table td{padding:.6rem .9rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:top}
+.pron-table tr:last-child td{border-bottom:none}
+.pron-table tr:hover td{background:rgba(255,255,255,.02)}
+.pron-letter{font-family:'Cinzel',serif;font-size:1.05rem;color:var(--gold);letter-spacing:.05em}
+.pron-sounds{color:var(--ice-bright);font-style:italic}
+.pron-example{color:var(--aurora-b);font-weight:600}
+.pron-example-en{color:var(--muted);font-size:.82rem}
+.pron-note{color:var(--muted);font-size:.82rem}
+.pron-tip-box{display:flex;align-items:flex-start;gap:.7rem;margin-top:1.2rem;padding:.8rem 1rem;border-radius:var(--r);background:rgba(61,232,160,.05);border:1px solid rgba(61,232,160,.2)}
+.pron-tip-icon{color:var(--aurora-g);font-size:1rem;flex-shrink:0;margin-top:.1rem}
+.pron-tip-text{font-size:.85rem;color:var(--muted);line-height:1.55}
 
 /* ── Heatmap ── */
 .hm-section{display:flex;flex-direction:column;gap:.7rem}
