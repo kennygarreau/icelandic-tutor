@@ -59,13 +59,14 @@ if (collectorUrl) {
 
   const lcpHist  = meter.createHistogram('web_vital_lcp',  { description: 'Largest Contentful Paint',  unit: 'ms' });
   const inpHist  = meter.createHistogram('web_vital_inp',  { description: 'Interaction to Next Paint',  unit: 'ms' });
-  const clsHist  = meter.createHistogram('web_vital_cls',  { description: 'Cumulative Layout Shift' });
+  const clsHist  = meter.createHistogram('web_vital_cls',  { description: 'Cumulative Layout Shift',
+    advice: { explicitBucketBoundaries: [0, 0.025, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 1.0] } });
   const fcpHist  = meter.createHistogram('web_vital_fcp',  { description: 'First Contentful Paint',     unit: 'ms' });
   const ttfbHist = meter.createHistogram('web_vital_ttfb', { description: 'Time to First Byte',         unit: 'ms' });
 
   onLCP (m => lcpHist.record (m.value, { rating: m.rating }), { reportAllChanges: true });
   onINP (m => inpHist.record (m.value, { rating: m.rating }), { reportAllChanges: true });
-  onCLS (m => clsHist.record (m.value, { rating: m.rating }), { reportAllChanges: true });
+  onCLS (m => clsHist.record (m.value, { rating: m.rating }));
   onFCP (m => fcpHist.record (m.value, { rating: m.rating }));
   onTTFB(m => ttfbHist.record(m.value, { rating: m.rating }));
 
