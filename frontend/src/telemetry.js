@@ -4,15 +4,15 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { DocumentLoadInstrumentation } from '@opentelemetry/instrumentation-document-load';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { W3CTraceContextPropagator, CompositePropagator, W3CBaggagePropagator } from '@opentelemetry/core';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
-import { MeterProvider, PeriodicExportingMetricReader, ExplicitBucketHistogramAggregation, View } from '@opentelemetry/sdk-metrics';
+import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics';
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { onLCP, onINP, onCLS, onFCP, onTTFB } from 'web-vitals';
 
 const collectorUrl = import.meta.env.VITE_OTEL_COLLECTOR_URL || '';
-const resource = new Resource({ 'service.name': 'icelandic-tutor-frontend' });
+const resource = resourceFromAttributes({ 'service.name': 'icelandic-tutor-frontend' });
 
 // ── Traces ────────────────────────────────────────────────────────────────────
 const traceProvider = new WebTracerProvider({ resource });
@@ -48,14 +48,6 @@ registerInstrumentations({
 if (collectorUrl) {
   const meterProvider = new MeterProvider({
     resource,
-    views: [
-      new View({
-        aggregation: new ExplicitBucketHistogramAggregation(
-          [0, 0.01, 0.025, 0.05, 0.075, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 0.75, 1.0]
-        ),
-        instrumentName: 'web_vital_cls',
-      }),
-    ],
     readers: [
       new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter({ url: `${collectorUrl}/v1/metrics` }),
