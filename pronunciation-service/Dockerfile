@@ -7,11 +7,11 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 RUN pip3 install --no-cache-dir \
-    faster-whisper==1.0.3 \
-    fastapi==0.111.0 \
-    uvicorn[standard]==0.30.1 \
-    python-multipart==0.0.9 \
-    requests==2.31.0
+    faster-whisper==1.2.1 \
+    fastapi==0.136.1 \
+    uvicorn[standard]==0.47.0 \
+    python-multipart==0.0.29 \
+    requests==2.34.2
 
 COPY main.py .
 EXPOSE 8003
