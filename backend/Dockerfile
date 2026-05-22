@@ -6,6 +6,7 @@ RUN pip install --no-cache-dir \
     uvicorn[standard]==0.47.0 \
     httpx==0.28.1 \
     pydantic==2.13.4 \
+    python-multipart==0.0.29 \
     opentelemetry-sdk==1.42.1 \
     opentelemetry-exporter-otlp-proto-http==1.42.1 \
     opentelemetry-instrumentation-fastapi==0.63b1 \
