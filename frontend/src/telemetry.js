@@ -15,17 +15,16 @@ const collectorUrl = import.meta.env.VITE_OTEL_COLLECTOR_URL || '';
 const resource = resourceFromAttributes({ 'service.name': 'icelandic-tutor-frontend' });
 
 // ── Traces ────────────────────────────────────────────────────────────────────
-const traceProvider = new WebTracerProvider({ resource });
-
-if (collectorUrl) {
-  traceProvider.addSpanProcessor(
-    new BatchSpanProcessor(
-      new OTLPTraceExporter({ url: `${collectorUrl}/v1/traces` })
-    )
-  );
-} else {
+if (!collectorUrl) {
   console.debug('[OTel] VITE_OTEL_COLLECTOR_URL not set — telemetry not exported');
 }
+
+const traceProvider = new WebTracerProvider({
+  resource,
+  spanProcessors: collectorUrl
+    ? [new BatchSpanProcessor(new OTLPTraceExporter({ url: `${collectorUrl}/v1/traces` }))]
+    : [],
+});
 
 traceProvider.register({
   propagator: new CompositePropagator({
