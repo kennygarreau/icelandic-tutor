@@ -5,7 +5,7 @@ import { tracer, SpanStatusCode } from './telemetry';
 const API     = '/api';
 const WHISPER = '/whisper';
 const TTS     = '/tts';
-const PRONUN  = '/pronunciation';
+const PRONUN  = '/api/pronunciation';
 const LEVELS  = ['beginner','intermediate','advanced'];
 
 const WELCOME_MSG = {
