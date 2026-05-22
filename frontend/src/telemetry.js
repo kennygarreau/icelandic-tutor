@@ -11,7 +11,7 @@ import { MeterProvider, PeriodicExportingMetricReader, ExplicitBucketHistogramAg
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-http';
 import { onLCP, onINP, onCLS, onFCP, onTTFB } from 'web-vitals';
 
-const collectorUrl = process.env.REACT_APP_OTEL_COLLECTOR_URL || '';
+const collectorUrl = import.meta.env.VITE_OTEL_COLLECTOR_URL || '';
 const resource = new Resource({ 'service.name': 'icelandic-tutor-frontend' });
 
 // ── Traces ────────────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ if (collectorUrl) {
     )
   );
 } else {
-  console.debug('[OTel] REACT_APP_OTEL_COLLECTOR_URL not set — telemetry not exported');
+  console.debug('[OTel] VITE_OTEL_COLLECTOR_URL not set — telemetry not exported');
 }
 
 traceProvider.register({

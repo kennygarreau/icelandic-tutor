@@ -103,7 +103,7 @@ services:
     build:
       context: ./frontend
       args:
-        REACT_APP_OTEL_COLLECTOR_URL: ${OTEL_COLLECTOR_URL:-}
+        VITE_OTEL_COLLECTOR_URL: ${OTEL_COLLECTOR_URL:-}
     container_name: icelandic_frontend
     restart: unless-stopped
     depends_on:
