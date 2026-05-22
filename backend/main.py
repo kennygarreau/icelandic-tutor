@@ -1812,7 +1812,7 @@ async def retrieve_context(query: str, top_k: int = 3) -> str:
                 for chunk in chunks:
                     relevance = chunk.get("relevance", 0)
                     RAG_RELEVANCE.observe(relevance)
-                    if relevance < 0.3:
+                    if relevance < 0.84:
                         continue
                     source = chunk.get("source", "book")
                     parts.append(f"[From {source}, relevance {relevance:.2f}]\n{chunk['text']}")
