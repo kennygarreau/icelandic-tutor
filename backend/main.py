@@ -149,7 +149,7 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS pronunciation_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id TEXT NOT NULL, date TEXT NOT NULL,
+            session_id TEXT, date TEXT NOT NULL,
             expected_text TEXT, spoken_text TEXT,
             overall_score INTEGER, word_scores TEXT,
             phoneme_tips TEXT
@@ -158,6 +158,23 @@ def init_db():
         # Migrations
         try:
             c.execute("ALTER TABLE flashcards ADD COLUMN part_of_speech TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Make pronunciation_log.session_id nullable (recreate if NOT NULL constraint present)
+        try:
+            col_info = c.execute("PRAGMA table_info(pronunciation_log)").fetchall()
+            session_col = next((r for r in col_info if r["name"] == "session_id"), None)
+            if session_col and session_col["notnull"]:
+                c.execute("ALTER TABLE pronunciation_log RENAME TO pronunciation_log_old")
+                c.execute("""CREATE TABLE pronunciation_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT, date TEXT NOT NULL,
+                    expected_text TEXT, spoken_text TEXT,
+                    overall_score INTEGER, word_scores TEXT,
+                    phoneme_tips TEXT
+                )""")
+                c.execute("INSERT INTO pronunciation_log SELECT * FROM pronunciation_log_old")
+                c.execute("DROP TABLE pronunciation_log_old")
         except Exception:
             pass
         # Deduplicate: keep the oldest card per icelandic word, then enforce uniqueness
@@ -993,12 +1010,15 @@ When this material is relevant, naturally reference it in your tip or correction
             if gc not in GRAMMAR_CATEGORIES: gc = "other"
             db.execute("INSERT INTO error_log(session_id,date,error_type,original,correction,explanation,grammar_category) VALUES(?,?,?,?,?,?,?)",
                        (sid,today,gc,err.get("original",""),err.get("correction",""),err.get("explanation",""),gc))
+            GRAMMAR_ERRORS.labels(category=gc).inc()
         # Save vocabulary (INSERT OR IGNORE deduplicates on icelandic text)
         due = today
         for v in new_vocab:
             if v.get("icelandic") and v.get("english"):
-                db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
+                inserted = db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
                            (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),due,now_iso(),sid))
+                if inserted.rowcount:
+                    FLASHCARDS_GEN.labels(level=req.level).inc()
         # Auto-complete lesson when goal met
         lesson_just_completed = False
         if req.mode=="lesson" and req.lesson_id and lp.get("goal_met"):
@@ -1133,8 +1153,10 @@ When this material is relevant, naturally reference it in your tip or correction
                 GRAMMAR_ERRORS.labels(category=gc).inc()
             for v in new_vocab:
                 if v.get("icelandic") and v.get("english"):
-                    db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
+                    inserted = db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
                                (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),today,now_iso(),sid))
+                    if inserted.rowcount:
+                        FLASHCARDS_GEN.labels(level=req.level).inc()
             # Auto-complete lesson when goal met
             lesson_just_completed = False
             if req.mode=="lesson" and req.lesson_id and lp.get("goal_met"):
@@ -1389,6 +1411,7 @@ async def score_pronunciation(
     audio: UploadFile = File(...),
     expected_text: str = Form(""),
     session_id: str = Form(""),
+    translate: str = Form(""),
 ):
     """Proxy to pronunciation service and log the result."""
     audio_bytes = await audio.read()
@@ -1402,17 +1425,31 @@ async def score_pronunciation(
     except Exception as e:
         raise HTTPException(502, f"Pronunciation service error: {e}")
 
-    # Log result
-    if session_id:
-        with get_db() as db:
-            db.execute("""INSERT INTO pronunciation_log
-                (session_id,date,expected_text,spoken_text,overall_score,word_scores,phoneme_tips)
-                VALUES(?,?,?,?,?,?,?)""",
-                (session_id,today_iso(),expected_text,
-                 result.get("spoken_text",""),result.get("overall_score",0),
-                 json.dumps(result.get("word_scores",[])),
-                 json.dumps(result.get("phoneme_tips",[]))))
-            db.commit()
+    spoken = result.get("spoken_text", "")
+
+    # Optionally translate what was heard back into English
+    if translate and spoken:
+        try:
+            raw = await call_llm(
+                [{"role": "user", "content": spoken}],
+                "Translate the following Icelandic text to English. "
+                "Return only the English translation, no explanation.",
+                max_tokens=120,
+            )
+            result["spoken_english"] = raw.strip().strip('"')
+        except Exception:
+            pass
+
+    # Log result — session_id is optional metadata, always log
+    with get_db() as db:
+        db.execute("""INSERT INTO pronunciation_log
+            (session_id,date,expected_text,spoken_text,overall_score,word_scores,phoneme_tips)
+            VALUES(?,?,?,?,?,?,?)""",
+            (session_id or None, today_iso(), expected_text,
+             spoken, result.get("overall_score",0),
+             json.dumps(result.get("word_scores",[])),
+             json.dumps(result.get("phoneme_tips",[]))))
+        db.commit()
     if isinstance(result, dict):
         PRON_SCORE.observe(result.get("overall_score", 0))
     return result

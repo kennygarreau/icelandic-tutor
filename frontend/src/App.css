@@ -118,8 +118,15 @@ input,textarea{font-family:inherit;color:inherit}
 .pron-score-circle{width:44px;height:44px;border-radius:50%;border:2px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
 .pron-pct{font-family:'Cinzel',serif;font-size:.95rem;font-weight:700;line-height:1}
 .pron-pct-label{font-size:.55rem;opacity:.7}
+.pron-header-left{display:flex;flex-direction:column;gap:.15rem}
+.pron-grade{font-size:.82rem;color:var(--muted)}
+.pron-heard-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem;margin-bottom:.55rem;padding:.4rem .55rem;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid rgba(56,178,232,.3)}
+.pron-heard-is{font-size:.88rem;color:var(--ice-bright)}
+.pron-heard-en{font-size:.82rem;color:var(--muted);font-style:italic}
 .pron-words{display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.5rem}
-.pron-word{padding:.2rem .5rem;border-radius:6px;font-size:.85rem;font-style:italic;border:1px solid}
+.pron-word{display:flex;align-items:center;gap:.3rem;padding:.2rem .5rem;border-radius:6px;font-size:.85rem;border:1px solid}
+.pron-word-text{font-style:italic}
+.pron-word-pct{font-size:.72rem;opacity:.75;font-variant-numeric:tabular-nums}
 .pron-good{background:rgba(61,232,160,.1);border-color:rgba(61,232,160,.3);color:var(--aurora-g)}
 .pron-ok{background:rgba(201,168,76,.1);border-color:rgba(201,168,76,.3);color:var(--gold)}
 .pron-bad{background:rgba(232,80,80,.1);border-color:rgba(232,80,80,.3);color:var(--red)}

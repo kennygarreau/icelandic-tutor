@@ -72,16 +72,19 @@ if (collectorUrl) {
   const fcpHist  = meter.createHistogram('web_vital_fcp',  { description: 'First Contentful Paint',     unit: 'ms' });
   const ttfbHist = meter.createHistogram('web_vital_ttfb', { description: 'Time to First Byte',         unit: 'ms' });
 
-  onLCP (m => lcpHist.record (m.value, { rating: m.rating }));
+  onLCP (m => lcpHist.record (m.value, { rating: m.rating }), { reportAllChanges: true });
   onINP (m => inpHist.record (m.value, { rating: m.rating }), { reportAllChanges: true });
   onCLS (m => clsHist.record (m.value, { rating: m.rating }), { reportAllChanges: true });
   onFCP (m => fcpHist.record (m.value, { rating: m.rating }));
   onTTFB(m => ttfbHist.record(m.value, { rating: m.rating }));
 
-  // INP and CLS are only finalised when the user leaves — flush before tab closes
+  // Flush after a short delay on hide/unload so LCP finalisation (which fires
+  // on the same events) has time to record before the export goes out.
+  const flushDelayed = () => setTimeout(() => meterProvider.forceFlush(), 100);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') meterProvider.forceFlush();
+    if (document.visibilityState === 'hidden') flushDelayed();
   });
+  addEventListener('pagehide', flushDelayed);
 }
 
 export const tracer = trace.getTracer('icelandic-tutor-frontend');

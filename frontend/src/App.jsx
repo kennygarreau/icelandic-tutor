@@ -125,7 +125,7 @@ function ChatView(){
   useEffect(()=>{
     _launchChat=(mode,id)=>{
       setChatMode({mode,id,label:''});
-      setMessages((mode==='lesson'||mode==='scenario')?[]:[WELCOME_MSG]); setSessionId(null); setPronScore(null); setNewVocab([]); setLessonComplete(null);
+      setMessages((mode==='lesson'||mode==='scenario')?[]:[WELCOME_MSG]); setSessionId(null); setNewVocab([]); setLessonComplete(null);
       if(mode==='scenario') fetch(`${API}/scenarios/${id}`).then(r=>r.json()).then(s=>setChatMode(c=>({...c,label:`🎭 ${s.title}`,scenarioData:s})));
       if(mode==='lesson')   fetch(`${API}/lessons/${id}`).then(r=>r.json()).then(l=>setChatMode(c=>({...c,label:`📖 ${l.title}`,lessonData:l})));
     };
@@ -154,7 +154,7 @@ function ChatView(){
   const beginLesson=(lessonId,lessonTitle)=>{
     setChatMode(c=>({...c,mode:'lesson',id:lessonId}));
     setMessages([]);
-    setLoading(true);setPronScore(null);
+    setLoading(true);
     const streamId=Date.now()+1;
     const level=stateRef.current.level;
     fetch(`${API}/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -193,7 +193,7 @@ function ChatView(){
   const beginScenario=(scenarioId)=>{
     setChatMode(c=>({...c,mode:'scenario',id:scenarioId}));
     setMessages([]);
-    setLoading(true);setPronScore(null);
+    setLoading(true);
     const streamId=Date.now()+1;
     const level=stateRef.current.level;
     fetch(`${API}/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},
@@ -235,12 +235,11 @@ function ChatView(){
     const userMsg={id:Date.now(),role:'user',text:userText};
     const nextMessages=[...messages,userMsg];
     setMessages(nextMessages);setLoading(true);setPronScore(null);
+    if(audioBlob) scorePronunciation(audioBlob,userText);
 
     const history=nextMessages.filter(m=>m.role==='user'||m.role==='assistant')
       .map(m=>({role:m.role,content:m.role==='user'?m.text:m.icelandic}));
 
-    const prevIcelandic=[...messages].reverse().find(m=>m.role==='assistant')?.icelandic;
-    if(audioBlob&&prevIcelandic) scorePronunciation(audioBlob,prevIcelandic,userText);
 
     const streamId=Date.now()+1;
     const _span=tracer.startSpan('chat.turn',{attributes:{'chat.level':level,'chat.mode':chatMode.mode,'input.length':userText.length}});
@@ -305,17 +304,19 @@ function ChatView(){
     }finally{_span.end();setLoading(false);inputRef.current?.focus();}
   },[]);
 
-  const scorePronunciation=async(blob,expectedText,spokenText)=>{
-    const _span=tracer.startSpan('pronunciation.score',{attributes:{'expected.length':expectedText.length}});
+
+  const scorePronunciation=async(blob,spokenText)=>{
+    const _span=tracer.startSpan('pronunciation.score');
     try{
       const form=new FormData();
       form.append('audio',blob,'rec.webm');
-      form.append('expected_text',expectedText);
       form.append('spoken_text',spokenText);
+      form.append('translate','1');
+      if(stateRef.current.sessionId) form.append('session_id',stateRef.current.sessionId);
       const r=await fetch(`${PRONUN}/score`,{method:'POST',body:form});
       if(!r.ok){_span.setStatus({code:SpanStatusCode.ERROR});return;}
       const result=await r.json();
-      _span.setAttributes({'score.overall':result.overall_score??0,'score.grade':result.grade??''});
+      _span.setAttributes({'score.overall':result.overall_score??0});
       _span.setStatus({code:SpanStatusCode.OK});
       setPronScore(result);
     }catch(e){_span.setStatus({code:SpanStatusCode.ERROR});console.error('Pron:',e);}
@@ -452,7 +453,6 @@ function ChatView(){
           inputRef={inputRef}
           currentAudioRef={currentAudioRef}
           onStopAudio={()=>setPlayingId(null)}
-          onClearScore={()=>setPronScore(null)}
         />
       </div>
 
@@ -524,7 +524,7 @@ function ChatView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // CHAT INPUT — isolated so keystrokes never re-render the message list
 // ═══════════════════════════════════════════════════════════════════════════════
-const ChatInput=React.memo(function ChatInput({loading,onSend,autoPlay,onAutoPlayChange,speed,onSpeedChange,inputRef,currentAudioRef,onStopAudio,onClearScore}){
+const ChatInput=React.memo(function ChatInput({loading,onSend,autoPlay,onAutoPlayChange,speed,onSpeedChange,inputRef,currentAudioRef,onStopAudio}){
   const [input,setInput]=useState('');
   const [recording,setRecording]=useState(false);
   const mediaRecorder=useRef(null);
@@ -545,7 +545,7 @@ const ChatInput=React.memo(function ChatInput({loading,onSend,autoPlay,onAutoPla
       mediaRecorder.current.ondataavailable=e=>{if(e.data.size>0)audioChunks.current.push(e.data);};
       mediaRecorder.current.start();
       recordingStartRef.current=Date.now();
-      setRecording(true);onClearScore();
+      setRecording(true);
     }catch{alert('Microphone access denied.');}
   };
 
@@ -567,8 +567,7 @@ const ChatInput=React.memo(function ChatInput({loading,onSend,autoPlay,onAutoPla
 
   const stopRecording=()=>{
     if(mediaRecorder.current&&mediaRecorder.current.state!=='inactive'){
-      mediaRecorder.current.addEventListener('dataavailable',e=>{
-        if(e.data.size>0)audioChunks.current.push(e.data);
+      mediaRecorder.current.addEventListener('stop',()=>{
         mediaRecorder.current.stream.getTracks().forEach(t=>t.stop());
         setRecording(false);
         if(!isProcessingRef.current){
@@ -626,24 +625,46 @@ function PronunciationPanel({score}){
   return(
     <div className="pron-panel">
       <div className="pron-header">
-        <span className="block-label">🎙 Pronunciation</span>
+        <div className="pron-header-left">
+          <span className="block-label">🎙 Pronunciation</span>
+          {score.grade&&<span className="pron-grade">{score.grade}</span>}
+        </div>
         <div className="pron-score-circle" style={{color:col,borderColor:col}}>
           <span className="pron-pct">{pct}</span>
           <span className="pron-pct-label">%</span>
         </div>
       </div>
+      {score.spoken_text&&(
+        <div className="pron-heard-row">
+          <span className="pron-heard-is icelandic">"{score.spoken_text}"</span>
+          {score.spoken_english&&(
+            <span className="pron-heard-en">→ {score.spoken_english}</span>
+          )}
+        </div>
+      )}
       {score.word_scores?.length>0&&(
         <div className="pron-words">
           {score.word_scores.map((w,i)=>{
             const wp=Math.round(w.score||0);
             const wc=wp>=80?'good':wp>=55?'ok':'bad';
-            return <div key={i} className={`pron-word pron-${wc}`} title={`${wp}%`}>{w.word}</div>;
+            const clarityMode=w.expected===w.spoken;
+            const tooltip=clarityMode
+              ?`Clarity: ${wp}%`
+              :w.spoken
+                ?`Heard: "${w.spoken}" — ${wp}%`
+                :`Word not heard (${w.status||'missing'})`;
+            return(
+              <div key={i} className={`pron-word pron-${wc}`} title={tooltip}>
+                <span className="pron-word-text">{w.expected}</span>
+                <span className="pron-word-pct">{wp}%</span>
+              </div>
+            );
           })}
         </div>
       )}
-      {score.phoneme_issues?.length>0&&(
+      {score.phoneme_tips?.length>0&&(
         <div className="pron-issues">
-          {score.phoneme_issues.slice(0,2).map((p,i)=>(
+          {score.phoneme_tips.slice(0,2).map((p,i)=>(
             <p key={i} className="pron-issue">• {p.tip}</p>
           ))}
         </div>

@@ -249,6 +249,7 @@ async def score_pronunciation(
 
         word_scores = []
         if expected_tokens:
+            # Compare mode: score each expected word against what was spoken
             s_idx = 0
             for e_tok in expected_tokens:
                 if s_idx < len(spoken_words):
@@ -263,11 +264,20 @@ async def score_pronunciation(
                         "similarity": 0, "whisper_confidence": 0,
                         "issues": [], "status": "missing",
                     })
+        elif spoken_words:
+            # Clarity mode: no target text — score each spoken word by Whisper confidence
+            word_scores = [{
+                "expected": sw["word"],
+                "spoken":   sw["word"],
+                "score":    round(sw["probability"] * 100),
+                "similarity": 1.0,
+                "whisper_confidence": round(sw["probability"], 3),
+                "issues": [],
+                "status": "good" if sw["probability"] >= 0.80 else "fair" if sw["probability"] >= 0.55 else "needs_work",
+            } for sw in spoken_words]
 
         if word_scores:
             overall = round(sum(w["score"] for w in word_scores) / len(word_scores))
-        elif spoken_words:
-            overall = round(sum(w["probability"] for w in spoken_words) / len(spoken_words) * 100)
         else:
             overall = 0
 
