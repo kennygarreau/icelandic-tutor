@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ── Icelandic Tutor — garuda deployment ───────────────────────────────────────
 # All containers run on garuda (Arch, RTX 5080)
 # Configure LLM_PROVIDER, OLLAMA_BASE_URL, OLLAMA_MODEL etc. in .env
