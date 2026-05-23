@@ -71,9 +71,24 @@ Primary use case: voice chat turn.
 9. The backend emits a final SSE `done` event containing the English correction, vocabulary, and lesson progress fields.
 10. Concurrently, the browser POSTs the same audio to `/pronunciation/score`. Whisper re-transcribes with word-level timestamps; per-word scores are shown in the feedback panel.
 
+## GPU vs CPU per service
+
+Each service was evaluated for whether GPU acceleration provides a meaningful benefit. With a single GPU shared between Whisper and the LLM, VRAM is a limited resource — assigning it to services that don't need it wastes headroom and adds contention.
+
+| Service       | Device | GPU impact if switched | Rationale |
+|---------------|--------|------------------------|-----------|
+| Whisper STT   | **GPU** | 🔴 Critical | `large-v3` on CPU takes minutes per request; on GPU it's near real-time. The model stays resident in VRAM across requests to avoid reload cost. |
+| LLM (Ollama)  | **GPU** | 🔴 Critical | A 12B parameter model on CPU produces ~1–2 tokens/sec; on GPU it produces ~40–60 tokens/sec. Unusable without GPU. |
+| Piper TTS     | CPU    | 🟢 Negligible | Piper synthesises a typical Icelandic sentence in under 100ms on CPU. GPU would save at most a few milliseconds — not perceptible. `use_cuda=False` is intentional. |
+| RAG service   | CPU    | 🟡 Minor | `multilingual-e5-small` is a tiny embedding model; a single query embeds in ~10ms on CPU. GPU would cut this to ~2ms — irrelevant against the LLM latency of several seconds. |
+| Backend       | CPU    | 🟢 None | Pure I/O-bound orchestration — JSON parsing, SQLite reads, HTTP proxying. No matrix operations. |
+| Frontend      | CPU    | 🟢 None | Static file serving via Nginx. |
+
+The RTX 5080 has 16 GB VRAM. `mistral-nemo:12b` at 4-bit quantization uses ~7–8 GB; Whisper `large-v3` uses ~3 GB — leaving ~5 GB headroom. Adding TTS or RAG to the GPU would consume VRAM without any user-perceptible improvement.
+
 ## Decisions
 
 - **Why SQLite over Postgres:** Single-user homelab app with no concurrent writers and no need to run a separate database server. A volume-mounted file is simpler to back up and migrate.
 - **Why a separate Whisper service:** Isolating the GPU workload into its own container keeps model weights resident in VRAM across requests. Both the transcription and pronunciation scoring endpoints share that one loaded model without paying the load cost twice.
-- **Why support two LLM backends:** Ollama runs entirely offline on local DGX Spark hardware, which is the normal path. The Claude API option exists for quality comparison and as a fallback, and adding it required only a second implementation of the same streaming interface.
+- **Why support two LLM backends:** Ollama runs entirely offline on the local GPU host, which is the normal path. The Claude API option exists for quality comparison and as a fallback, and adding it required only a second implementation of the same streaming interface.
 - **Why RAG over relying on the LLM alone:** Icelandic grammar is a narrow domain where LLMs hallucinate plausibly but incorrectly. Grounding explanations in actual grammar PDF text produces corrections that are verifiably sourced rather than confabulated.
