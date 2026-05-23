@@ -2022,7 +2022,16 @@ function PronunciationView(){
           <tbody>
             {sec.rows.map(([letter,sounds,example,note],i)=>(
               <tr key={i}>
-                <td><span className="pron-letter">{letter}</span></td>
+                <td>
+                  {letter.includes(' ') ? (
+                    <span className="pron-letter-pair">
+                      <span className="pron-letter">{letter.split(' ')[0]}</span>
+                      <span className="pron-letter-lower">{letter.split(' ')[1]}</span>
+                    </span>
+                  ) : (
+                    <span className="pron-letter">{letter}</span>
+                  )}
+                </td>
                 <td className="pron-sounds">{sounds}</td>
                 <td>
                   <span className="pron-example icelandic">{example.split(' ')[0]}</span>

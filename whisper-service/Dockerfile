@@ -1,12 +1,16 @@
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.9.2-runtime-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip ffmpeg \
+    python3 python3-pip python3-venv ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
 WORKDIR /app
-RUN pip3 install --no-cache-dir \
+RUN pip install --no-cache-dir \
     faster-whisper==1.2.1 \
     fastapi==0.136.1 \
     uvicorn[standard]==0.47.0 \

@@ -219,6 +219,8 @@ input,textarea{font-family:inherit;color:inherit}
 .pron-table tr:last-child td{border-bottom:none}
 .pron-table tr:hover td{background:rgba(255,255,255,.02)}
 .pron-letter{font-family:'Cinzel',serif;font-size:1.05rem;color:var(--gold);letter-spacing:.05em}
+.pron-letter-pair{display:inline-flex;align-items:baseline;gap:.25rem}
+.pron-letter-lower{font-family:'Crimson Pro',Georgia,serif;font-size:1.1rem;color:var(--gold);letter-spacing:.02em}
 .pron-sounds{color:var(--ice-bright);font-style:italic}
 .pron-example{color:var(--aurora-b);font-weight:600}
 .pron-example-en{color:var(--muted);font-size:.82rem}
