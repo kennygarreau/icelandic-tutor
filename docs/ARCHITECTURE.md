@@ -78,7 +78,7 @@ Each service was evaluated for whether GPU acceleration provides a meaningful be
 | Service       | Device | GPU impact if switched | Rationale |
 |---------------|--------|------------------------|-----------|
 | Whisper STT   | **GPU** | 🔴 Critical | `large-v3` on CPU takes minutes per request; on GPU it's near real-time. The model stays resident in VRAM across requests to avoid reload cost. |
-| LLM (Ollama)  | **GPU** | 🔴 Critical | A 12B parameter model on CPU produces ~1–2 tokens/sec; on GPU it produces ~40–60 tokens/sec. Unusable without GPU. |
+| LLM (Ollama)  | **GPU** | 🔴 Critical | A 12B parameter model on CPU produces ~3–5 tokens/sec; on GPU it produces ~100-120 tokens/sec. Unusable without GPU. |
 | Piper TTS     | CPU    | 🟢 Negligible | Piper synthesises a typical Icelandic sentence in under 100ms on CPU. GPU would save at most a few milliseconds — not perceptible. `use_cuda=False` is intentional. |
 | RAG service   | CPU    | 🟡 Minor | `multilingual-e5-small` is a tiny embedding model; a single query embeds in ~10ms on CPU. GPU would cut this to ~2ms — irrelevant against the LLM latency of several seconds. |
 | Backend       | CPU    | 🟢 None | Pure I/O-bound orchestration — JSON parsing, SQLite reads, HTTP proxying. No matrix operations. |

@@ -542,10 +542,14 @@ function ChatView(){
         <div className="phoneme-footer">
           <button className="footer-label footer-label-link" onClick={()=>goToTab('pronunciation')}>Pronunciation ›</button>
           <div className="phoneme-grid">
-            {[['þ','th in "think"'],['ð','th in "this"'],['æ','eye'],['ö','u in "burn"'],
-              ['á','ow in "cow"'],['í/ý','ee'],['ú','oo'],['é','ye']].map(([ch,hint])=>(
-              <div key={ch} className="phoneme">
-                <span className="ph-char">{ch}</span><span className="ph-hint">{hint}</span>
+            {[['Þ','þ','th in "think"'],['Ð','ð','th in "this"'],['Æ','æ','eye'],['Ö','ö','u in "burn"'],
+              ['Á','á','ow in "cow"'],['É','é','ye'],['Í','í','ee'],['Ú','ú','oo']].map(([upper,lower,hint])=>(
+              <div key={upper} className="phoneme">
+                <span className="ph-pair">
+                  <span className="ph-char">{upper}</span>
+                  <span className="ph-char-lower">{lower}</span>
+                </span>
+                <span className="ph-hint">{hint}</span>
               </div>
             ))}
           </div>
