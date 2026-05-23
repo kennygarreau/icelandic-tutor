@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -70,46 +71,47 @@ def get_collection():
     return _collection
 
 # ── Text chunking ─────────────────────────────────────────────────────────────
-def chunk_text(text: str, source: str) -> list[dict]:
-    """Split text into overlapping chunks with metadata."""
-    # Clean up whitespace artifacts from PDF extraction
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    text = re.sub(r' {2,}', ' ', text)
-    text = text.strip()
-
-    # Split on paragraph boundaries first, then by size
-    paragraphs = re.split(r'\n\n+', text)
+def chunk_text(pages_text: list[tuple[int, str]], source: str) -> list[dict]:
+    """Split page-annotated text into overlapping chunks, preserving page numbers."""
     chunks = []
     current = ""
-    current_start = 0
+    current_page = 1
     chunk_idx = 0
 
-    for para in paragraphs:
-        para = para.strip()
-        if not para:
-            continue
+    for page_num, text in pages_text:
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        text = re.sub(r' {2,}', ' ', text).strip()
+        paragraphs = re.split(r'\n\n+', text)
 
-        # If adding this paragraph exceeds chunk size, save current and start new
-        words = (current + " " + para).split()
-        if len(words) > CHUNK_SIZE and current:
-            chunks.append({
-                "text": current.strip(),
-                "source": source,
-                "chunk_id": chunk_idx,
-            })
-            chunk_idx += 1
-            # Keep overlap: last N words of current chunk
-            overlap_words = current.split()[-CHUNK_OVERLAP:]
-            current = " ".join(overlap_words) + "\n\n" + para
-        else:
-            current = (current + "\n\n" + para).strip() if current else para
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
 
-    # Don't forget the last chunk
+            if not current:
+                current_page = page_num
+
+            words = (current + " " + para).split() if current else para.split()
+            if len(words) > CHUNK_SIZE and current:
+                chunks.append({
+                    "text": current.strip(),
+                    "source": source,
+                    "chunk_id": chunk_idx,
+                    "page_number": current_page,
+                })
+                chunk_idx += 1
+                overlap_words = current.split()[-CHUNK_OVERLAP:]
+                current = " ".join(overlap_words) + "\n\n" + para
+                current_page = page_num
+            else:
+                current = (current + "\n\n" + para).strip() if current else para
+
     if current.strip():
         chunks.append({
             "text": current.strip(),
             "source": source,
             "chunk_id": chunk_idx,
+            "page_number": current_page,
         })
 
     return chunks
@@ -132,7 +134,7 @@ def ingest_pdf(pdf_path: str) -> dict:
         return {"status": "already_ingested", "source": source_name, "total_chunks": count}
 
     logger.info(f"Ingesting {path.name}...")
-    full_text = ""
+    pages_text = []
     page_count = 0
 
     with pdfplumber.open(pdf_path) as pdf:
@@ -140,12 +142,13 @@ def ingest_pdf(pdf_path: str) -> dict:
         for i, page in enumerate(pdf.pages):
             text = page.extract_text()
             if text:
-                full_text += f"\n\n{text}"
+                pages_text.append((i + 1, text))
             if i % 50 == 0:
                 logger.info(f"  Extracted {i+1}/{page_count} pages...")
 
-    logger.info(f"Extracted {len(full_text)} chars from {page_count} pages. Chunking...")
-    chunks = chunk_text(full_text, source_name)
+    total_chars = sum(len(t) for _, t in pages_text)
+    logger.info(f"Extracted {total_chars} chars from {page_count} pages. Chunking...")
+    chunks = chunk_text(pages_text, source_name)
     logger.info(f"Created {len(chunks)} chunks. Embedding...")
 
     # Embed in batches
@@ -157,7 +160,7 @@ def ingest_pdf(pdf_path: str) -> dict:
         embeddings = model.encode(texts, normalize_embeddings=True).tolist()
         EMBED_DURATION.observe(time.perf_counter() - t0)
         ids = [f"{source_name}_{c['chunk_id']}" for c in batch]
-        metadatas = [{"source": c["source"], "chunk_id": c["chunk_id"]} for c in batch]
+        metadatas = [{"source": c["source"], "chunk_id": c["chunk_id"], "page_number": c["page_number"]} for c in batch]
         documents = [c["text"] for c in batch]
         collection.add(ids=ids, embeddings=embeddings, metadatas=metadatas, documents=documents)
         CHUNKS_INGESTED.inc(len(batch))
@@ -258,6 +261,7 @@ def query_endpoint(req: QueryRequest):
         chunks.append({
             "text": doc,
             "source": results["metadatas"][0][i].get("source", "unknown"),
+            "page_number": results["metadatas"][0][i].get("page_number"),
             "relevance": round(1 - results["distances"][0][i], 3),
         })
 
@@ -295,3 +299,5 @@ async def startup_ingest():
             ingest_pdf(str(pdf))
         except Exception as e:
             logger.error(f"Startup ingest error for {pdf.name}: {e}")
+
+app.mount("/pdfs", StaticFiles(directory=PDFS_DIR), name="pdfs")

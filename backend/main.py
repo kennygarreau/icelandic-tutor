@@ -969,8 +969,9 @@ async def chat(req: ChatRequest):
     msgs = [{"role":m.role,"content":m.content} for m in req.messages[-6:]]
 
     # Collect RAG result — has been running concurrently during the sync work above.
+    rag_sources = []
     if rag_task:
-        rag_context = await rag_task
+        rag_context, rag_sources = await rag_task
         if rag_context:
             system += f"""
 
@@ -1035,7 +1036,7 @@ When this material is relevant, naturally reference it in your tip or correction
             "difficulty_assessment":data.get("difficulty_assessment",req.level),
             "new_vocabulary":new_vocab,"lesson_progress":lp,
             "lesson_just_completed":lesson_just_completed,
-            "mode":req.mode}
+            "mode":req.mode,"rag_sources":rag_sources}
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest):
@@ -1056,8 +1057,9 @@ async def chat_stream(req: ChatRequest):
     system = build_system_prompt(req.mode, req.scenario_id, req.lesson_id, req.level)
     msgs = [{"role":m.role,"content":m.content} for m in req.messages[-6:]]
 
+    rag_sources = []
     if rag_task:
-        rag_context = await rag_task
+        rag_context, rag_sources = await rag_task
         if rag_context:
             system += f"""
 
@@ -1167,7 +1169,7 @@ When this material is relevant, naturally reference it in your tip or correction
                     lesson_just_completed = True
             db.commit()
 
-        yield f'data: {json.dumps({"t":"done","session_id":sid,"icelandic":data.get("icelandic",""),"english_translation":data.get("english_translation",""),"english_correction":correction,"new_vocabulary":new_vocab,"lesson_progress":lp,"lesson_just_completed":lesson_just_completed,"mode":req.mode})}\n\n'
+        yield f'data: {json.dumps({"t":"done","session_id":sid,"icelandic":data.get("icelandic",""),"english_translation":data.get("english_translation",""),"english_correction":correction,"new_vocabulary":new_vocab,"lesson_progress":lp,"lesson_just_completed":lesson_just_completed,"mode":req.mode,"rag_sources":rag_sources})}\n\n'
 
     return StreamingResponse(
         generate(),
@@ -1792,8 +1794,8 @@ class ExamSubmission(BaseModel):
 
 
 # ── RAG retrieval ─────────────────────────────────────────────────────────────
-async def retrieve_context(query: str, top_k: int = 3) -> str:
-    """Query the RAG service and return formatted context string for injection."""
+async def retrieve_context(query: str, top_k: int = 3) -> tuple[str, list[dict]]:
+    """Query the RAG service; return (context_string_for_llm, sources_for_frontend)."""
     t0 = time.monotonic()
     with tracer.start_as_current_span("rag.retrieve") as span:
         span.set_attribute("rag.query_len", len(query))
@@ -1802,25 +1804,27 @@ async def retrieve_context(query: str, top_k: int = 3) -> str:
             async with httpx.AsyncClient(timeout=10) as c:
                 r = await c.post(f"{RAG_URL}/query",
                     json={"query": query, "top_k": top_k})
-                if not r.ok:
-                    return ""
+                if not r.is_success:
+                    return "", []
                 data = r.json()
                 chunks = data.get("chunks", [])
                 if not chunks:
-                    return ""
-                parts = []
+                    return "", []
+                parts, sources = [], []
                 for chunk in chunks:
                     relevance = chunk.get("relevance", 0)
                     RAG_RELEVANCE.observe(relevance)
                     if relevance < 0.84:
                         continue
                     source = chunk.get("source", "book")
+                    page   = chunk.get("page_number")
                     parts.append(f"[From {source}, relevance {relevance:.2f}]\n{chunk['text']}")
+                    sources.append({"source": source, "page_number": page, "relevance": relevance})
                 span.set_attribute("rag.chunks_returned", len(parts))
-                return "\n\n---\n".join(parts)
+                return "\n\n---\n".join(parts), sources
         except Exception as e:
             logger.debug(f"RAG retrieval failed (non-critical): {e}")
-            return ""
+            return "", []
         finally:
             RAG_DURATION.observe(time.monotonic() - t0)
 

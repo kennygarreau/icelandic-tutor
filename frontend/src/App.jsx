@@ -178,7 +178,8 @@ function ChatView(){
             } else if(evt.t==='done'){
               setMessages(prev=>prev.map(m=>m.id===streamId
                 ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
-                  correction:evt.english_correction,lesson_progress:evt.lesson_progress,streaming:false}:m));
+                  correction:evt.english_correction,lesson_progress:evt.lesson_progress,
+                  rag_sources:evt.rag_sources||[],streaming:false}:m));
               if(!stateRef.current.sessionId) setSessionId(evt.session_id);
               if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
             }
@@ -217,7 +218,8 @@ function ChatView(){
             } else if(evt.t==='done'){
               setMessages(prev=>prev.map(m=>m.id===streamId
                 ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
-                  correction:evt.english_correction,lesson_progress:evt.lesson_progress,streaming:false}:m));
+                  correction:evt.english_correction,lesson_progress:evt.lesson_progress,
+                  rag_sources:evt.rag_sources||[],streaming:false}:m));
               if(!stateRef.current.sessionId) setSessionId(evt.session_id);
               if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
             }
@@ -288,7 +290,8 @@ function ChatView(){
             setNewVocab(evt.new_vocabulary||[]);
             setMessages(prev=>prev.map(m=>m.id===streamId
               ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
-                correction:evt.english_correction,lesson_progress:evt.lesson_progress,streaming:false}
+                correction:evt.english_correction,lesson_progress:evt.lesson_progress,
+                rag_sources:evt.rag_sources||[],streaming:false}
               :m));
             if(evt.lesson_just_completed) setLessonComplete(stateRef.current.chatMode);
             if(autoPlay) speakText(evt.icelandic,streamId);
@@ -413,6 +416,22 @@ function ChatView(){
                       <p className="msg-translation">{msg.english_translation}</p>
                     )}
                     {msg.lesson_progress&&<LessonProgressBar progress={msg.lesson_progress}/>}
+                    {!msg.streaming&&msg.rag_sources&&msg.rag_sources.length>0&&(
+                      <div className="rag-sources">
+                        {msg.rag_sources.map((s,i)=>{
+                          const titles={'complete_icelandic':'Complete Icelandic',
+                            'colloquial-icelandic-the-complete-course-for-beginners':'Colloquial Icelandic'};
+                          const title=titles[s.source]||s.source;
+                          const url=`/rag/pdfs/${s.source}.pdf${s.page_number?`#page=${s.page_number}`:''}`;
+                          return(
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                              className="rag-source-link" title={`Relevance: ${(s.relevance*100).toFixed(0)}%`}>
+                              📖 {title}{s.page_number?`, p.${s.page_number}`:''}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
                     <div className="msg-actions">
                       <button className={`speak-btn ${playingId===msg.id?'playing':''}`}
                         onClick={()=>speakText(msg.icelandic,msg.id)}>
