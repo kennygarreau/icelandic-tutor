@@ -19,7 +19,7 @@ See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full service/routing diagram.
 | Service     | Recommended device            | Notes                                         |
 |-------------|-------------------------------|-----------------------------------------------|
 | Whisper STT | RTX 5080 (CUDA 12.9)          | `large-v3`, float16, near real-time           |
-| LLM         | RTX 5080 via Ollama           | qwen3:32b; larger models may require more VRAM|
+| LLM         | RTX 5080 via Ollama           | `mistral-nemo:12b` fits in 16 GB VRAM          |
 | Piper TTS   | CPU or any GPU                | Icelandic `is_IS-bui-medium` voice            |
 | RAG service | CPU                           | `multilingual-e5-small` embeddings, ChromaDB  |
 | Frontend    | Any                           | Served via Nginx                              |
@@ -71,19 +71,19 @@ Install Ollama on the host running your GPU:
 ```bash
 curl -fsSL https://ollama.ai/install.sh | sh
 
-# Pull a model — qwen3:32b runs well on an RTX 5080
-ollama pull qwen3:32b
+# mistral-nemo:12b fits comfortably in 16 GB VRAM (RTX 5080)
+ollama pull mistral-nemo:12b
 
-# Larger options if you have more VRAM
+# Larger models if you have more VRAM (24 GB+)
+ollama pull qwen3:32b
 ollama pull qwen2.5:72b
-ollama pull llama3.3:70b
 ```
 
 Then in `.env`:
 ```
 LLM_PROVIDER=ollama
 OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL=qwen3:32b
+OLLAMA_MODEL=mistral-nemo:12b
 ```
 
 ### Option B: Anthropic Claude API

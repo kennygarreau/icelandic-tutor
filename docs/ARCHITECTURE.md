@@ -54,7 +54,7 @@ flowchart LR
 
 **RAG service** — ingests Icelandic grammar PDFs at startup using `intfloat/multilingual-e5-small` embeddings (CPU-only) into ChromaDB. Exposes a `/query` endpoint used by the backend to retrieve the top-3 most relevant chunks before every LLM call.
 
-**Ollama / Claude** — the LLM backend, external to the Docker stack. In the primary setup Ollama runs on the same host as the Docker stack (RTX 5080, `host.docker.internal:11434`), serving qwen3:32b. Switchable at runtime via `LLM_PROVIDER` env var. Both paths receive the same structured prompt and are expected to return the same JSON schema (Icelandic reply, English correction with error categories, new vocabulary, lesson progress).
+**Ollama / Claude** — the LLM backend, external to the Docker stack. In the primary setup Ollama runs on the same host as the Docker stack (RTX 5080, `host.docker.internal:11434`), serving `mistral-nemo:12b` (fits within the RTX 5080's 16 GB VRAM). Switchable at runtime via `LLM_PROVIDER` env var. Both paths receive the same structured prompt and are expected to return the same JSON schema (Icelandic reply, English correction with error categories, new vocabulary, lesson progress).
 
 ## Data flow
 
