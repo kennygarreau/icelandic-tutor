@@ -10,7 +10,7 @@ You speak Icelandic → Whisper (GPU) → Backend → LLM + RAG context → Pipe
                             Flashcards · CEFR assessment · heatmap
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for a full service/routing diagram.
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for a full service/routing diagram.
 
 ---
 
@@ -18,7 +18,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for a full service/routing diagram.
 
 | Service     | Recommended device         | Notes                              |
 |-------------|----------------------------|------------------------------------|
-| Whisper STT | RTX 5080                   | `large-v3-turbo`, near real-time   |
+| Whisper STT | RTX 5080                   | `large-v3`, near real-time         |
 | LLM         | DGX Spark × 2 (via Ollama) | qwen3:32b or larger                |
 | Piper TTS   | CPU or any GPU             | Icelandic `is_IS-bui-medium` voice |
 | Frontend    | Any                        | Served via Nginx                   |
@@ -31,11 +31,11 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for a full service/routing diagram.
 
 - Docker & Docker Compose v2
 - NVIDIA Container Toolkit (for GPU access)
-- NVIDIA drivers ≥ 550
+- NVIDIA drivers ≥ 570
 
 ```bash
 # Verify GPU access in Docker
-docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.9.2-base-ubuntu24.04 nvidia-smi
 ```
 
 ### 2. Configure environment
@@ -187,7 +187,8 @@ Remove the `deploy.resources` GPU block from `docker-compose.yml` for the whispe
 icelandic-tutor/
 ├── docker-compose.yml
 ├── .env.example
-├── ARCHITECTURE.md          # Mermaid service/routing diagram
+├── docs/
+│   └── ARCHITECTURE.md      # Mermaid service/routing diagram
 ├── backend/
 │   ├── Dockerfile
 │   └── main.py              # FastAPI orchestrator
@@ -204,7 +205,7 @@ icelandic-tutor/
 ├── frontend/
 │   ├── Dockerfile
 │   └── src/
-│       ├── App.js           # All views (Chat, Scenarios, Lessons, etc.)
+│       ├── App.jsx          # All views (Chat, Scenarios, Lessons, etc.)
 │       └── App.css          # Norse/aurora aesthetic, mobile-responsive
 └── nginx/
     └── nginx.conf           # Reverse proxy + TLS

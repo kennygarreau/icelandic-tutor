@@ -48,7 +48,7 @@ flowchart LR
 
 **SQLite database** — single file at `/data/tutor.db`, mounted as a Docker volume. Stores sessions, messages, error log, lesson progress, flashcard deck, pronunciation history, and CEFR assessments. Chosen over a server database because this is a single-user homelab app with no concurrent writers.
 
-**Whisper service** — runs `faster-whisper large-v3-turbo` on the host GPU (RTX 5080). Serves two endpoints that share one loaded model: `/transcribe` for speech-to-text and `/score` for pronunciation assessment. The scoring path re-transcribes audio with word-level timestamps enabled, then aligns expected vs spoken tokens using a string similarity and confidence blend.
+**Whisper service** — runs `faster-whisper large-v3` on the host GPU (RTX 5080, CUDA 12.9). Serves two endpoints that share one loaded model: `/transcribe` for speech-to-text and `/score` for pronunciation assessment. The scoring path re-transcribes audio with word-level timestamps enabled, then aligns expected vs spoken tokens using a string similarity and confidence blend.
 
 **TTS service** — wraps Piper with the `is_IS-bui-medium` Icelandic voice model. Returns raw WAV audio that the browser plays directly. Voice and speed are configurable via environment variable.
 
@@ -66,10 +66,10 @@ Primary use case: voice chat turn.
 4. The backend queries the RAG service for grammar context relevant to the conversation.
 5. The backend builds a system prompt (with level, mode, scenario or lesson instructions, and RAG context) and opens a streaming request to the LLM.
 6. As LLM tokens arrive, the backend scans the buffer for the `"icelandic": "` key and forwards matching characters as SSE `tok` events. The Icelandic sentence appears in the browser incrementally.
-7. When the stream closes, the backend parses the full JSON response and writes the session turn, grammar errors (by category), and any new vocabulary to SQLite.
-8. The backend emits a final SSE `done` event containing the English correction, vocabulary, and lesson progress fields.
-9. Concurrently, the browser POSTs the same audio to `/pronunciation/score`. Whisper re-transcribes with word-level timestamps; per-word scores are shown in the feedback panel.
-10. The browser fetches TTS audio from `/tts/synthesize` and auto-plays the Icelandic response.
+7. As soon as the closing quote of the `icelandic` field is detected, the backend emits a `tts_ready` SSE event containing the fully-assembled Icelandic text. The browser immediately fetches TTS audio from `/tts/synthesize` and begins playback — this fires while the LLM is still generating the remainder of the JSON (corrections, vocabulary, lesson fields).
+8. When the LLM stream closes, the backend parses the full JSON response and writes the session turn, grammar errors (by category), and any new vocabulary to SQLite.
+9. The backend emits a final SSE `done` event containing the English correction, vocabulary, and lesson progress fields.
+10. Concurrently, the browser POSTs the same audio to `/pronunciation/score`. Whisper re-transcribes with word-level timestamps; per-word scores are shown in the feedback panel.
 
 ## Decisions
 
