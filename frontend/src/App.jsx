@@ -96,17 +96,6 @@ export default function App(){
         ))}
       </nav>
 
-      {pdfModal&&(
-        <div className="pdf-modal-overlay" onClick={()=>setPdfModal(null)}>
-          <div className="pdf-modal" onClick={e=>e.stopPropagation()}>
-            <div className="pdf-modal-header">
-              <span className="pdf-modal-title">📖 {pdfModal.title}</span>
-              <button className="pdf-modal-close" onClick={()=>setPdfModal(null)}>✕</button>
-            </div>
-            <iframe className="pdf-modal-frame" src={pdfModal.url} title={pdfModal.title}/>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -116,14 +105,15 @@ export default function App(){
 // ═══════════════════════════════════════════════════════════════════════════════
 function ChatView(){
   const [messages,  setMessages]  = useState([WELCOME_MSG]);
-  const [sessionId, setSessionId] = useState(null);
-  const [level,     setLevel]     = useState('beginner');
-  const [loading,   setLoading]   = useState(false);
-  const [playingId, setPlayingId] = useState(null);
-  const [correction,setCorrection]= useState(WELCOME_MSG.correction);
-  const [newVocab,  setNewVocab]  = useState([]);
-  const [autoPlay,  setAutoPlay]  = useState(true);
-  const [speed,     setSpeed]     = useState(0.85);
+  const [sessionId,    setSessionId]    = useState(null);
+  const [level,        setLevel]        = useState('beginner');
+  const [loading,      setLoading]      = useState(false);
+  const [playingId,    setPlayingId]    = useState(null);
+  const [correction,   setCorrection]   = useState(WELCOME_MSG.correction);
+  const [newVocab,     setNewVocab]     = useState([]);
+  const [autoPlay,     setAutoPlay]     = useState(true);
+  const [speed,        setSpeed]        = useState(0.85);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [chatMode,  setChatMode]  = useState({mode:'free',id:null,label:''});
   const [pronScore, setPronScore] = useState(null);
   const [shownTranslations, setShownTranslations] = useState({});
@@ -188,13 +178,14 @@ function ChatView(){
               setMessages(prev=>prev.map(m=>m.id===streamId
                 ?{...m,icelandic:(started?m.icelandic:'')+evt.v,streaming:true}:m));
               started=true;
+            } else if(evt.t==='tts_ready'){
+              if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
             } else if(evt.t==='done'){
               setMessages(prev=>prev.map(m=>m.id===streamId
                 ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
                   correction:evt.english_correction,lesson_progress:evt.lesson_progress,
                   rag_sources:evt.rag_sources||[],streaming:false}:m));
               if(!stateRef.current.sessionId) setSessionId(evt.session_id);
-              if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
             }
           }catch{}
         }
@@ -228,13 +219,14 @@ function ChatView(){
               setMessages(prev=>prev.map(m=>m.id===streamId
                 ?{...m,icelandic:(started?m.icelandic:'')+evt.v,streaming:true}:m));
               started=true;
+            } else if(evt.t==='tts_ready'){
+              if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
             } else if(evt.t==='done'){
               setMessages(prev=>prev.map(m=>m.id===streamId
                 ?{...m,icelandic:evt.icelandic,english_translation:evt.english_translation,
                   correction:evt.english_correction,lesson_progress:evt.lesson_progress,
                   rag_sources:evt.rag_sources||[],streaming:false}:m));
               if(!stateRef.current.sessionId) setSessionId(evt.session_id);
-              if(stateRef.current.autoPlay) stateRef.current.speakText(evt.icelandic,streamId);
             }
           }catch{}
         }
@@ -295,6 +287,8 @@ function ChatView(){
             } else {
               setMessages(prev=>prev.map(m=>m.id===streamId?{...m,icelandic:m.icelandic+evt.v}:m));
             }
+          } else if(evt.t==='tts_ready'){
+            if(autoPlay) speakText(evt.icelandic,streamId);
           } else if(evt.t==='done'){
             _span.addEvent('stream_done',{'total_ms':Date.now()-_t0});
             _span.setStatus({code:SpanStatusCode.OK});
@@ -307,7 +301,6 @@ function ChatView(){
                 rag_sources:evt.rag_sources||[],streaming:false}
               :m));
             if(evt.lesson_just_completed) setLessonComplete(stateRef.current.chatMode);
-            if(autoPlay) speakText(evt.icelandic,streamId);
           } else if(evt.t==='error'){
             setMessages(prev=>[...prev,{id:Date.now(),role:'error',text:evt.msg}]);
           }
@@ -363,12 +356,16 @@ function ChatView(){
                 <div className="level-pills">
                   {LEVELS.map(l=>(
                     <button key={l} className={`pill ${level===l?'active':''}`} onClick={()=>setLevel(l)}>
-                      {l.charAt(0).toUpperCase()+l.slice(1)}
+                      <span className="level-full">{l.charAt(0).toUpperCase()+l.slice(1)}</span>
+                      <span className="level-abbr">{l.charAt(0).toUpperCase()+l.slice(1,3)}</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
+            <button className="feedback-toggle-btn" onClick={()=>setFeedbackOpen(o=>!o)}>
+              Feedback{(correction?.errors?.length>0||correction?.tip)&&<span className="feedback-dot"/>}
+            </button>
             <button className="new-chat-btn" onClick={newSession} title="Start a new conversation">New Chat</button>
           </div>
         </div>
@@ -489,8 +486,12 @@ function ChatView(){
         />
       </div>
 
-      <div className="feedback-col">
-        <div className="feedback-header"><h2>Feedback</h2></div>
+      {feedbackOpen&&<div className="feedback-overlay" onClick={()=>setFeedbackOpen(false)}/>}
+      <div className={`feedback-col${feedbackOpen?' feedback-open':''}`}>
+        <div className="feedback-header">
+          <h2>Feedback</h2>
+          <button className="feedback-close-btn" onClick={()=>setFeedbackOpen(false)}>✕</button>
+        </div>
         {pronScore&&<PronunciationPanel score={pronScore}/>}
         {correction&&(
           <div className="correction-body">
@@ -550,6 +551,17 @@ function ChatView(){
           </div>
         </div>
       </div>
+      {pdfModal&&(
+        <div className="pdf-modal-overlay" onClick={()=>setPdfModal(null)}>
+          <div className="pdf-modal" onClick={e=>e.stopPropagation()}>
+            <div className="pdf-modal-header">
+              <span className="pdf-modal-title">📖 {pdfModal.title}</span>
+              <button className="pdf-modal-close" onClick={()=>setPdfModal(null)}>✕</button>
+            </div>
+            <iframe className="pdf-modal-frame" src={pdfModal.url} title={pdfModal.title}/>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1072,35 +1084,75 @@ function ProgressView(){
   useEffect(()=>{setLoading(true);fetch(`${API}/progress?days=${days}`).then(r=>r.json()).then(d=>{setData(d);setLoading(false);});},[days]);
   if(loading)return<div className="page-layout"><div className="empty-state">Loading…</div></div>;
   const totals=data?.totals||{};const daily=data?.daily||[];
+  const streak=data?.streak||0;
   const maxTurns=Math.max(...daily.map(d=>d.turns||0),1);
-  const streak=(()=>{if(!daily.length)return 0;const dates=new Set(daily.map(d=>d.date));let count=0,d=new Date();while(true){const iso=d.toISOString().slice(0,10);if(dates.has(iso)){count++;d.setDate(d.getDate()-1);}else break;}return count;})();
+  const accuracy=totals.total_turns>0?Math.round(((totals.total_turns-(totals.total_errors||0))/totals.total_turns)*100):null;
   return(
     <div className="page-layout">
       <div className="page-header">
         <h2 className="page-title">Your Progress</h2>
         <div className="days-toggle">{[7,30,90].map(n=><button key={n} className={`pill ${days===n?'active':''}`} onClick={()=>setDays(n)}>{n}d</button>)}</div>
       </div>
-      <div className="stats-grid">
-        {[{label:'Total Turns',value:totals.total_turns||0},{label:'Sessions',value:totals.total_sessions||0},
-          {label:'Active Days',value:totals.active_days||0},{label:'Day Streak',value:streak,suffix:'🔥'},
-          {label:'Cards Total',value:data?.cards_total||0},{label:'Cards Due',value:data?.cards_due||0,highlight:(data?.cards_due||0)>0},
-        ].map((s,i)=>(
-          <div key={i} className={`stat-card ${s.highlight?'highlight':''}`}>
-            <div className="stat-value">{s.value}{s.suffix||''}</div>
-            <div className="stat-label">{s.label}</div>
-          </div>
-        ))}
-      </div>
-      <div className="chart-section">
-        <p className="chart-title">Daily Practice</p>
-        <div className="bar-chart">
-          {daily.length===0&&<div className="empty-state">No data yet — start practicing!</div>}
-          {daily.map((d,i)=>(
-            <div key={i} className="bar-col">
-              <div className="bar-wrap"><div className="bar" style={{height:`${(d.turns/maxTurns)*100}%`}} title={`${d.turns} turns`}/></div>
-              <span className="bar-label">{d.date?.slice(5)}</span>
+
+      <div className="progress-stat-group">
+        <p className="progress-group-label">Last {days} days</p>
+        <div className="stats-grid">
+          {[
+            {label:'Turns',value:totals.total_turns||0},
+            {label:'Errors',value:totals.total_errors||0},
+            {label:'Accuracy',value:accuracy!==null?`${accuracy}%`:'—'},
+            {label:'Active Days',value:totals.active_days||0},
+            {label:'Sessions',value:totals.total_sessions||0},
+            {label:'Lessons Done',value:data?.lessons_completed||0},
+          ].map((s,i)=>(
+            <div key={i} className="stat-card">
+              <div className="stat-value">{s.value}</div>
+              <div className="stat-label">{s.label}</div>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="progress-stat-group">
+        <p className="progress-group-label">All time</p>
+        <div className="stats-grid stats-grid-3">
+          {[
+            {label:'Day Streak',value:streak>0?`${streak} 🔥`:streak},
+            {label:'Cards Total',value:data?.cards_total||0},
+            {label:'Cards Due',value:data?.cards_due||0,highlight:(data?.cards_due||0)>0},
+          ].map((s,i)=>(
+            <div key={i} className={`stat-card ${s.highlight?'highlight':''}`}>
+              <div className="stat-value">{s.value}</div>
+              <div className="stat-label">{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="chart-section">
+        <div className="chart-header">
+          <p className="chart-title">Daily Practice</p>
+          <div className="chart-legend">
+            <span className="legend-dot legend-dot-turns"/>Turns
+            <span className="legend-dot legend-dot-errors"/>Errors
+          </div>
+        </div>
+        <div className="bar-chart">
+          {daily.length===0&&<div className="empty-state">No data yet — start practicing!</div>}
+          {daily.map((d,i)=>{
+            const errFrac=d.turns>0?Math.min(d.errors_made/d.turns,1):0;
+            return(
+              <div key={i} className="bar-col">
+                <div className="bar-wrap">
+                  <div className="bar" style={{height:`${(d.turns/maxTurns)*100}%`}}
+                       title={`${d.turns} turns · ${d.errors_made} errors`}>
+                    <div className="bar-error-fill" style={{height:`${errFrac*100}%`}}/>
+                  </div>
+                </div>
+                <span className="bar-label">{d.date?.slice(5)}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

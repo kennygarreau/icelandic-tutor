@@ -1069,11 +1069,13 @@ REFERENCE MATERIAL from student's Icelandic grammar books (use when relevant to 
 When this material is relevant, naturally reference it in your tip or correction (e.g. "As your grammar book explains..."). Do not force it into every response."""
 
     async def generate():
-        full_buffer = ""
-        scan_from   = 0
-        in_is       = False   # inside the "icelandic" value
-        is_done     = False   # finished extracting icelandic value
-        MARKER      = '"icelandic": "'
+        full_buffer      = ""
+        icelandic_buffer = ""   # raw JSON string fragments for the icelandic field
+        scan_from        = 0
+        in_is            = False   # inside the "icelandic" value
+        is_done          = False   # finished extracting icelandic value
+        tts_sent         = False   # tts_ready event already yielded
+        MARKER           = '"icelandic": "'
 
         model_name = OLLAMA_MODEL if LLM_PROVIDER == "ollama" else ANTHROPIC_MODEL
         t_llm  = time.monotonic()
@@ -1113,7 +1115,16 @@ When this material is relevant, naturally reference it in your tip or correction
                         scan_from = len(full_buffer)
 
                     if to_emit:
+                        icelandic_buffer += to_emit
                         yield f'data: {json.dumps({"t":"tok","v":to_emit})}\n\n'
+
+                    if is_done and not tts_sent:
+                        tts_sent = True
+                        try:
+                            icelandic_text = json.loads(f'"{icelandic_buffer}"')
+                        except Exception:
+                            icelandic_text = icelandic_buffer
+                        yield f'data: {json.dumps({"t":"tts_ready","icelandic":icelandic_text})}\n\n'
 
             except Exception as e:
                 logger.error(f"stream_llm error: {e}")
@@ -1125,49 +1136,62 @@ When this material is relevant, naturally reference it in your tip or correction
                     time.monotonic() - t_llm)
 
         # ── post-stream: parse, persist, send done event ──────────────────────
-        data       = parse_json(full_buffer)
-        correction = data.get("english_correction",{})
-        new_vocab  = data.get("new_vocabulary",[])
-        lp         = data.get("lesson_progress",{})
+        logger.info("post-stream: reached")
+        t_post = time.monotonic()
+        try:
+            with tracer.start_as_current_span("chat.parse_json") as parse_span:
+                data       = parse_json(full_buffer)
+                correction = data.get("english_correction",{})
+                new_vocab  = data.get("new_vocabulary",[])
+                lp         = data.get("lesson_progress",{})
+                parse_span.set_attribute("buffer_len", len(full_buffer))
+            logger.info(f"post-stream: parse took {(time.monotonic()-t_post)*1000:.0f}ms")
 
-        with get_db() as db:
-            last_user = next((m for m in reversed(req.messages) if m.role=="user"),None)
-            if last_user:
-                db.execute("INSERT INTO messages(session_id,role,content,created_at) VALUES(?,?,?,?)",
-                           (sid,"user",last_user.content,now_iso()))
-            db.execute("INSERT INTO messages(session_id,role,content,icelandic,correction,created_at) VALUES(?,?,?,?,?,?)",
-                       (sid,"assistant",data.get("icelandic",""),data.get("icelandic",""),json.dumps(correction),now_iso()))
-            db.execute("UPDATE sessions SET updated_at=?,level=?,turn_count=turn_count+1 WHERE id=?",
-                       (now_iso(),req.level,sid))
-            today    = today_iso()
-            errors_n = len(correction.get("errors",[]))
-            if db.execute("SELECT id FROM progress WHERE session_id=? AND date=?",(sid,today)).fetchone():
-                db.execute("UPDATE progress SET turns=turns+1,errors_made=errors_made+? WHERE session_id=? AND date=?",
-                           (errors_n,sid,today))
-            else:
-                db.execute("INSERT INTO progress(session_id,date,turns,errors_made,level) VALUES(?,?,1,?,?)",
-                           (sid,today,errors_n,req.level))
-            for err in correction.get("errors",[]):
-                gc = err.get("grammar_category","other")
-                if gc not in GRAMMAR_CATEGORIES: gc = "other"
-                db.execute("INSERT INTO error_log(session_id,date,error_type,original,correction,explanation,grammar_category) VALUES(?,?,?,?,?,?,?)",
-                           (sid,today,gc,err.get("original",""),err.get("correction",""),err.get("explanation",""),gc))
-                GRAMMAR_ERRORS.labels(category=gc).inc()
-            for v in new_vocab:
-                if v.get("icelandic") and v.get("english"):
-                    inserted = db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
-                               (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),today,now_iso(),sid))
-                    if inserted.rowcount:
-                        FLASHCARDS_GEN.labels(level=req.level).inc()
-            # Auto-complete lesson when goal met
+            t_db = time.monotonic()
+            with tracer.start_as_current_span("chat.db_write") as db_span:
+                with get_db() as db:
+                    last_user = next((m for m in reversed(req.messages) if m.role=="user"),None)
+                    if last_user:
+                        db.execute("INSERT INTO messages(session_id,role,content,created_at) VALUES(?,?,?,?)",
+                                   (sid,"user",last_user.content,now_iso()))
+                    db.execute("INSERT INTO messages(session_id,role,content,icelandic,correction,created_at) VALUES(?,?,?,?,?,?)",
+                               (sid,"assistant",data.get("icelandic",""),data.get("icelandic",""),json.dumps(correction),now_iso()))
+                    db.execute("UPDATE sessions SET updated_at=?,level=?,turn_count=turn_count+1 WHERE id=?",
+                               (now_iso(),req.level,sid))
+                    today    = today_iso()
+                    errors_n = len(correction.get("errors",[]))
+                    if db.execute("SELECT id FROM progress WHERE session_id=? AND date=?",(sid,today)).fetchone():
+                        db.execute("UPDATE progress SET turns=turns+1,errors_made=errors_made+? WHERE session_id=? AND date=?",
+                                   (errors_n,sid,today))
+                    else:
+                        db.execute("INSERT INTO progress(session_id,date,turns,errors_made,level) VALUES(?,?,1,?,?)",
+                                   (sid,today,errors_n,req.level))
+                    for err in correction.get("errors",[]):
+                        gc = err.get("grammar_category","other")
+                        if gc not in GRAMMAR_CATEGORIES: gc = "other"
+                        db.execute("INSERT INTO error_log(session_id,date,error_type,original,correction,explanation,grammar_category) VALUES(?,?,?,?,?,?,?)",
+                                   (sid,today,gc,err.get("original",""),err.get("correction",""),err.get("explanation",""),gc))
+                        GRAMMAR_ERRORS.labels(category=gc).inc()
+                    for v in new_vocab:
+                        if v.get("icelandic") and v.get("english"):
+                            inserted = db.execute("INSERT OR IGNORE INTO flashcards(icelandic,english,notes,category,part_of_speech,due_date,created_at,source_session) VALUES(?,?,?,?,?,?,?,?)",
+                                       (v["icelandic"],v["english"],v.get("notes",""),v.get("category","vocabulary"),v.get("part_of_speech",""),today,now_iso(),sid))
+                            if inserted.rowcount:
+                                FLASHCARDS_GEN.labels(level=req.level).inc()
+                    lesson_just_completed = False
+                    if req.mode=="lesson" and req.lesson_id and lp.get("goal_met"):
+                        already = db.execute("SELECT id FROM lesson_progress WHERE lesson_id=? AND completed=1",(req.lesson_id,)).fetchone()
+                        if not already:
+                            db.execute("INSERT INTO lesson_progress(lesson_id,completed,score,completed_at,session_id) VALUES(?,1,100,?,?)",
+                                       (req.lesson_id,now_iso(),sid))
+                            lesson_just_completed = True
+                    db.commit()
+                db_span.set_attribute("errors_logged", errors_n)
+                db_span.set_attribute("vocab_inserted", len(new_vocab))
+            logger.info(f"post-stream: db took {(time.monotonic()-t_db)*1000:.0f}ms  total={( time.monotonic()-t_post)*1000:.0f}ms")
+        except Exception as exc:
+            logger.error(f"post-stream error: {exc}", exc_info=True)
             lesson_just_completed = False
-            if req.mode=="lesson" and req.lesson_id and lp.get("goal_met"):
-                already = db.execute("SELECT id FROM lesson_progress WHERE lesson_id=? AND completed=1",(req.lesson_id,)).fetchone()
-                if not already:
-                    db.execute("INSERT INTO lesson_progress(lesson_id,completed,score,completed_at,session_id) VALUES(?,1,100,?,?)",
-                               (req.lesson_id,now_iso(),sid))
-                    lesson_just_completed = True
-            db.commit()
 
         yield f'data: {json.dumps({"t":"done","session_id":sid,"icelandic":data.get("icelandic",""),"english_translation":data.get("english_translation",""),"english_correction":correction,"new_vocabulary":new_vocab,"lesson_progress":lp,"lesson_just_completed":lesson_just_completed,"mode":req.mode,"rag_sources":rag_sources})}\n\n'
 
@@ -1266,15 +1290,27 @@ def get_progress(days:int=30):
             (f"-{days} days",)).fetchall()
         totals = db.execute("""SELECT SUM(turns) as total_turns,SUM(errors_made) as total_errors,
             COUNT(DISTINCT session_id) as total_sessions,COUNT(DISTINCT date) as active_days
-            FROM progress""").fetchone()
+            FROM progress WHERE date>=date('now',?)""",
+            (f"-{days} days",)).fetchone()
         cards_total = db.execute("SELECT COUNT(*) as n FROM flashcards").fetchone()["n"]
         cards_due   = db.execute("SELECT COUNT(*) as n FROM flashcards WHERE due_date<=date('now')").fetchone()["n"]
         lessons_done = db.execute("SELECT COUNT(DISTINCT lesson_id) as n FROM lesson_progress WHERE completed=1").fetchone()["n"]
         completed_lessons = [r["lesson_id"] for r in db.execute(
             "SELECT DISTINCT lesson_id FROM lesson_progress WHERE completed=1").fetchall()]
+        # Streak: computed from all-time data, independent of the period filter
+        all_dates = {r["date"] for r in db.execute(
+            "SELECT DISTINCT date FROM progress").fetchall()}
+    streak = 0
+    d = datetime.now(timezone.utc).date()
+    if d.isoformat() not in all_dates:
+        d -= timedelta(days=1)
+    while d.isoformat() in all_dates:
+        streak += 1
+        d -= timedelta(days=1)
     return {"daily":[dict(r) for r in daily],"totals":dict(totals),
             "cards_total":cards_total,"cards_due":cards_due,
-            "lessons_completed":lessons_done,"completed_lessons":completed_lessons}
+            "lessons_completed":lessons_done,"completed_lessons":completed_lessons,
+            "streak":streak}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HEATMAP / ERROR ANALYSIS
