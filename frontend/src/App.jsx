@@ -95,6 +95,18 @@ export default function App(){
           </button>
         ))}
       </nav>
+
+      {pdfModal&&(
+        <div className="pdf-modal-overlay" onClick={()=>setPdfModal(null)}>
+          <div className="pdf-modal" onClick={e=>e.stopPropagation()}>
+            <div className="pdf-modal-header">
+              <span className="pdf-modal-title">📖 {pdfModal.title}</span>
+              <button className="pdf-modal-close" onClick={()=>setPdfModal(null)}>✕</button>
+            </div>
+            <iframe className="pdf-modal-frame" src={pdfModal.url} title={pdfModal.title}/>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -116,6 +128,7 @@ function ChatView(){
   const [pronScore, setPronScore] = useState(null);
   const [shownTranslations, setShownTranslations] = useState({});
   const [lessonComplete, setLessonComplete] = useState(null);
+  const [pdfModal,      setPdfModal]       = useState(null); // {url, title}
 
   const chatEndRef     = useRef(null);
   const inputRef       = useRef(null);
@@ -424,10 +437,11 @@ function ChatView(){
                           const title=titles[s.source]||s.source;
                           const url=`/rag/pdfs/${s.source}.pdf${s.page_number?`#page=${s.page_number}`:''}`;
                           return(
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer"
-                              className="rag-source-link" title={`Relevance: ${(s.relevance*100).toFixed(0)}%`}>
+                            <button key={i} className="rag-source-link"
+                              title={`Relevance: ${(s.relevance*100).toFixed(0)}%`}
+                              onClick={()=>setPdfModal({url,title:`${title}${s.page_number?`, p.${s.page_number}`:''}` })}>
                               📖 {title}{s.page_number?`, p.${s.page_number}`:''}
-                            </a>
+                            </button>
                           );
                         })}
                       </div>
