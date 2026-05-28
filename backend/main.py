@@ -154,6 +154,17 @@ def init_db():
             overall_score INTEGER, word_scores TEXT,
             phoneme_tips TEXT
         );
+        CREATE TABLE IF NOT EXISTS grammar_drill_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            category TEXT NOT NULL,
+            difficulty TEXT NOT NULL,
+            question TEXT NOT NULL,
+            expected TEXT NOT NULL,
+            given TEXT NOT NULL,
+            correct INTEGER NOT NULL,
+            explanation TEXT
+        );
         """)
         # Migrations
         try:
@@ -2100,3 +2111,149 @@ async def submit_exam(exam_id: int, submission: ExamSubmission):
         db.commit()
 
     return {"exam_id": exam_id, "result": result}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GRAMMAR DRILL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+DRILL_CATEGORIES = [
+    "case_nominative","case_accusative","case_dative","case_genitive",
+    "verb_conjugation","verb_tense","noun_gender","adjective_agreement",
+]
+
+_drill_cache: dict = {}  # cache_key -> (timestamp, questions)
+_DRILL_CACHE_TTL = 3600.0
+
+DRILL_GEN_PROMPT = """You are an Icelandic grammar drill generator. Generate exactly {count} drill questions for category '{category}' at difficulty '{level}'.
+
+Return ONLY a valid JSON array, no markdown, no explanation. Each object:
+{{
+  "question": "Clear English prompt describing what form to produce",
+  "base_form": "the dictionary/infinitive/nominative form",
+  "expected": "exact correct Icelandic answer (lowercase)",
+  "answer_variants": ["Capitalized variant", "alternative spelling if any"],
+  "explanation": "One sentence explaining the rule applied",
+  "category": "{category}"
+}}
+
+Category guidance:
+- case_nominative: Ask for the nominative definite or indefinite form of a noun
+- case_accusative: Ask for the accusative form of a noun or pronoun
+- case_dative: Ask for the dative form, ideally with a preposition context (í, á, með, frá, hjá)
+- case_genitive: Ask for the genitive (possessive) form of a noun
+- verb_conjugation: Give an infinitive + subject pronoun, ask for the present tense form
+- verb_tense: Give a present tense verb form, ask for the simple past (þátíð)
+- noun_gender: Give a noun in nominative, ask whether it is masculine, feminine, or neuter
+- adjective_agreement: Give an adjective, target noun (with gender), case, and definiteness — ask for the correct adjective form
+
+Difficulty:
+- beginner: common nouns/verbs, regular patterns only (hestur, kona, barn, tala, vera, fara)
+- intermediate: strong verbs, all four cases with irregular nouns, common adjectives (stór, gamall)
+- advanced: uncommon strong verbs, archaic forms, complex declensions, unusual patterns
+
+Rules:
+- Never duplicate base_form within the batch
+- expected must be lowercase; answer_variants may include a capitalized form
+- For noun_gender questions, expected is one of: masculine, feminine, neuter
+- Make questions self-contained — include gender and noun class where relevant"""
+
+
+def _levenshtein(a: str, b: str) -> int:
+    if a == b: return 0
+    if not a: return len(b)
+    if not b: return len(a)
+    prev = list(range(len(b) + 1))
+    for ca in a:
+        curr = [prev[0] + 1]
+        for j, cb in enumerate(b):
+            curr.append(min(prev[j+1]+1, curr[j]+1, prev[j]+(ca != cb)))
+        prev = curr
+    return prev[-1]
+
+
+def _norm(s: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFC", s.strip().lower())
+
+
+class DrillAnswerReq(BaseModel):
+    category: str
+    difficulty: str
+    question: str
+    expected: str
+    answer_variants: list = []
+    given: str
+    explanation: str = ""
+
+
+@app.get("/drill/questions")
+async def get_drill_questions(category: str = "case_accusative", level: str = "beginner", count: int = 10):
+    if category not in DRILL_CATEGORIES:
+        raise HTTPException(400, f"Unknown category. Valid: {DRILL_CATEGORIES}")
+    if level not in ["beginner","intermediate","advanced"]:
+        raise HTTPException(400, "level must be beginner/intermediate/advanced")
+    count = max(1, min(count, 20))
+    cache_key = f"{category}:{level}"
+    now = time.time()
+    if cache_key in _drill_cache:
+        ts, questions = _drill_cache[cache_key]
+        if now - ts < _DRILL_CACHE_TTL:
+            return {"questions": questions, "category": category, "level": level, "cached": True}
+    prompt = DRILL_GEN_PROMPT.format(count=count, category=category, level=level)
+    try:
+        raw = await call_llm([{"role":"user","content":"Generate the drill questions now."}], prompt, max_tokens=2000)
+    except Exception as e:
+        raise HTTPException(502, f"LLM error: {e}")
+    try:
+        questions = json.loads(extract_json(raw))
+        if not isinstance(questions, list):
+            raise ValueError("not a list")
+    except Exception:
+        raise HTTPException(502, "LLM returned invalid JSON for drill questions")
+    _drill_cache[cache_key] = (now, questions)
+    return {"questions": questions, "category": category, "level": level, "cached": False}
+
+
+@app.post("/drill/answer")
+def submit_drill_answer(req: DrillAnswerReq):
+    given_norm = _norm(req.given)
+    all_correct = [_norm(req.expected)] + [_norm(v) for v in req.answer_variants]
+    correct = given_norm in all_correct
+    near_miss = False
+    if not correct:
+        near_miss = any(_levenshtein(given_norm, c) <= 1 for c in all_correct)
+        if near_miss:
+            correct = True
+    with get_db() as db:
+        db.execute(
+            "INSERT INTO grammar_drill_log(date,category,difficulty,question,expected,given,correct,explanation) VALUES(?,?,?,?,?,?,?,?)",
+            (today_iso(), req.category, req.difficulty, req.question, req.expected, req.given, int(correct), req.explanation)
+        )
+        if not correct:
+            db.execute(
+                "INSERT INTO error_log(session_id,date,error_type,original,correction,explanation,grammar_category) VALUES(?,?,?,?,?,?,?)",
+                ("drill", today_iso(), "drill", req.given, req.expected, req.explanation, req.category)
+            )
+        db.commit()
+    return {"correct": correct, "near_miss": near_miss, "expected": req.expected, "explanation": req.explanation}
+
+
+@app.get("/drill/stats")
+def get_drill_stats():
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT category, COUNT(*) as attempts, SUM(correct) as correct_count
+            FROM grammar_drill_log GROUP BY category
+        """).fetchall()
+        recent = db.execute("""
+            SELECT date, category, correct, question, expected, given
+            FROM grammar_drill_log ORDER BY id DESC LIMIT 20
+        """).fetchall()
+    by_category = {}
+    for r in rows:
+        a, c = r["attempts"], r["correct_count"] or 0
+        by_category[r["category"]] = {
+            "attempts": a, "correct": c,
+            "accuracy": round(c / a * 100) if a else 0,
+        }
+    return {"by_category": by_category, "recent": [dict(r) for r in recent]}

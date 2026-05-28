@@ -45,6 +45,7 @@ export default function App(){
     {id:'chat',      icon:<ChatIcon/>,  label:'Chat'},
     {id:'scenarios', icon:<SceneIcon/>, label:'Scenarios'},
     {id:'lessons',   icon:<BookIcon/>,  label:'Lessons'},
+    {id:'drill',     icon:<DrillIcon/>, label:'Drill'},
     {id:'flashcards',   icon:<CardIcon/>,   label:'Cards'},
     {id:'pronunciation',icon:<PronIcon/>,  label:'Pronunciation'},
     {id:'heatmap',      icon:<FireIcon/>,  label:'Heatmap'},
@@ -82,6 +83,7 @@ export default function App(){
         {tab==='chat'       && <ChatView/>}
         {tab==='scenarios'  && <ScenariosView onStart={(id)=>goChat('scenario',id)}/>}
         {tab==='lessons'    && <LessonsView   onStart={(id)=>goChat('lesson',id)}/>}
+        {tab==='drill'      && <DrillView/>}
         {tab==='pronunciation' && <PronunciationView/>}
         {tab==='heatmap'    && <HeatmapView/>}
         {tab==='progress'   && <ProgressView/>}
@@ -1592,6 +1594,237 @@ const CEFR_LEVELS = ['A1','A2','B1','B2','C1','C2'];
 const CEFR_COLORS = {
   A1:'#7a8aaa', A2:'#38b2e8', B1:'#3de8a0', B2:'#c9a84c', C1:'#9b7fe8', C2:'#e85050'
 };
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRILL VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const DRILL_CATEGORIES = [
+  {id:'case_nominative',   label:'Nominative'},
+  {id:'case_accusative',   label:'Accusative'},
+  {id:'case_dative',       label:'Dative'},
+  {id:'case_genitive',     label:'Genitive'},
+  {id:'verb_conjugation',  label:'Conjugation'},
+  {id:'verb_tense',        label:'Verb Tense'},
+  {id:'noun_gender',       label:'Noun Gender'},
+  {id:'adjective_agreement',label:'Adjectives'},
+];
+
+function DrillView(){
+  const [category, setCategory]   = useState('case_accusative');
+  const [level,    setLevel]      = useState('beginner');
+  const [phase,    setPhase]      = useState('idle'); // idle|loading|question|feedback
+  const [questions,setQuestions]  = useState([]);
+  const [qIdx,     setQIdx]       = useState(0);
+  const [input,    setInput]      = useState('');
+  const [result,   setResult]     = useState(null); // {correct, near_miss, expected, explanation}
+  const [session,  setSession]    = useState({correct:0, total:0});
+  const [stats,    setStats]      = useState(null);
+  const inputRef = useRef(null);
+
+  const loadStats = async () => {
+    try{const d=await fetch(`${API}/drill/stats`).then(r=>r.json()); setStats(d);}
+    catch(e){console.error(e);}
+  };
+
+  useEffect(()=>{loadStats();},[]);
+
+  const fetchBatch = async (cat, lvl) => {
+    setPhase('loading');
+    try{
+      const d = await fetch(`${API}/drill/questions?category=${cat}&level=${lvl}&count=10`).then(r=>r.json());
+      if(!d.questions||d.questions.length===0){setPhase('idle');return;}
+      setQuestions(d.questions);
+      setQIdx(0);
+      setInput('');
+      setResult(null);
+      setSession({correct:0,total:0});
+      setPhase('question');
+      setTimeout(()=>inputRef.current?.focus(),50);
+    }catch(e){console.error(e);setPhase('idle');}
+  };
+
+  const focusWeak = async () => {
+    let freshStats;
+    try{ freshStats = await fetch(`${API}/drill/stats`).then(r=>r.json()); setStats(freshStats); }
+    catch(e){ console.error(e); return; }
+    const cats = Object.entries(freshStats?.by_category||{});
+    if(cats.length===0){ fetchBatch(category, level); return; }
+    cats.sort((a,b)=>(a[1].accuracy??100)-(b[1].accuracy??100));
+    const weakest = cats[0][0];
+    setCategory(weakest);
+    fetchBatch(weakest, level);
+  };
+
+  const checkAnswer = async () => {
+    if(phase!=='question'||!input.trim()) return;
+    const q = questions[qIdx];
+    const r = await fetch(`${API}/drill/answer`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        category: q.category||category, difficulty: level,
+        question: q.question, expected: q.expected,
+        answer_variants: q.answer_variants||[], given: input.trim(),
+        explanation: q.explanation||'',
+      }),
+    }).then(r=>r.json());
+    setResult(r);
+    setSession(s=>({correct: s.correct+(r.correct?1:0), total: s.total+1}));
+    setPhase('feedback');
+    loadStats();
+  };
+
+  const nextQuestion = () => {
+    const nextIdx = qIdx+1;
+    if(nextIdx>=questions.length){setPhase('idle');return;}
+    setQIdx(nextIdx);
+    setInput('');
+    setResult(null);
+    setPhase('question');
+    setTimeout(()=>inputRef.current?.focus(),50);
+  };
+
+  const handleKey = (e) => {
+    if(e.key==='Enter' && phase==='question') checkAnswer();
+    if(e.key==='Enter' && phase==='feedback') nextQuestion();
+  };
+
+  const q = questions[qIdx];
+  const fmtCat = id => DRILL_CATEGORIES.find(c=>c.id===id)?.label || id.replace(/_/g,' ');
+
+  return(
+    <div className="page-layout">
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">Grammar Drill</h2>
+          <p className="page-sub">Targeted morphology practice</p>
+        </div>
+        <button className="pill active" onClick={focusWeak} title="Switch to your weakest category">Focus weak area</button>
+      </div>
+
+      {/* Controls */}
+      <div className="drill-controls">
+        <div className="drill-control-group">
+          <span className="drill-label">Category</span>
+          <div className="level-pills">
+            {DRILL_CATEGORIES.map(c=>(
+              <button key={c.id}
+                className={`pill ${category===c.id?'active':''}`}
+                onClick={()=>setCategory(c.id)}
+                disabled={phase==='loading'}
+              >{c.label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="drill-control-group">
+          <span className="drill-label">Level</span>
+          <div className="level-pills">
+            {['beginner','intermediate','advanced'].map(l=>(
+              <button key={l} className={`pill ${level===l?'active':''}`}
+                onClick={()=>setLevel(l)} disabled={phase==='loading'}>
+                {l.charAt(0).toUpperCase()+l.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Start / idle */}
+      {phase==='idle'&&(
+        <div className="drill-card drill-start">
+          <p className="drill-start-hint">
+            {session.total>0
+              ? `Session complete — ${session.correct}/${session.total} correct (${Math.round(session.correct/session.total*100)}%)`
+              : 'Select a category and level, then start drilling.'}
+          </p>
+          <button className="drill-start-btn" onClick={()=>fetchBatch(category,level)}>
+            {session.total>0 ? 'New Batch' : 'Start Drill'}
+          </button>
+        </div>
+      )}
+
+      {phase==='loading'&&(
+        <div className="drill-card drill-start">
+          <div className="empty-state">Generating questions…</div>
+        </div>
+      )}
+
+      {/* Active question */}
+      {(phase==='question'||phase==='feedback')&&q&&(
+        <div className="drill-card">
+          <div className="drill-progress">
+            <span className="drill-progress-label">{qIdx+1} / {questions.length}</span>
+            <span className="drill-session-score">{session.correct} correct</span>
+          </div>
+
+          <p className="drill-category-badge">{fmtCat(q.category||category)}</p>
+          <p className="drill-question">{q.question}</p>
+          {q.base_form&&<p className="drill-base">Base form: <em className="icelandic-inline">{q.base_form}</em></p>}
+
+          <div className="drill-input-row">
+            <input
+              ref={inputRef}
+              className={`drill-input ${phase==='feedback'?(result?.correct?'drill-input-correct':'drill-input-wrong'):''}`}
+              type="text" value={input}
+              onChange={e=>setInput(e.target.value)}
+              onKeyDown={handleKey}
+              placeholder="Type your answer…"
+              disabled={phase==='feedback'}
+              autoComplete="off" autoCorrect="off" spellCheck="false"
+            />
+            {phase==='question'&&(
+              <button className="drill-check-btn" onClick={checkAnswer} disabled={!input.trim()}>Check</button>
+            )}
+            {phase==='feedback'&&(
+              <button className="drill-next-btn" onClick={nextQuestion}>
+                {qIdx+1>=questions.length ? 'Done' : 'Next →'}
+              </button>
+            )}
+          </div>
+
+          {phase==='feedback'&&result&&(
+            <div className={`drill-feedback ${result.correct?'drill-feedback-correct':'drill-feedback-wrong'}`}>
+              <span className="drill-feedback-icon">{result.correct?'✓':'✗'}</span>
+              <div>
+                {result.correct&&result.near_miss&&(
+                  <p className="drill-feedback-nearmiss">Close — watch your spelling.</p>
+                )}
+                {!result.correct&&(
+                  <p className="drill-feedback-expected">Correct answer: <strong className="icelandic-inline">{result.expected}</strong></p>
+                )}
+                {result.explanation&&<p className="drill-feedback-explain">{result.explanation}</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* All-time stats */}
+      {stats&&Object.keys(stats.by_category||{}).length>0&&(
+        <div className="hm-section">
+          <p className="hm-section-title">All-time accuracy by category</p>
+          <div className="hm-categories">
+            {Object.entries(stats.by_category)
+              .sort((a,b)=>a[1].accuracy-b[1].accuracy)
+              .map(([cat,d])=>{
+                const pct=d.accuracy;
+                const col=pct>=80?'drill-acc-high':pct>=50?'drill-acc-mid':'drill-acc-low';
+                return(
+                  <div key={cat} className="hm-cat-row">
+                    <span className="hm-cat-label">{fmtCat(cat)}</span>
+                    <div className="hm-bar-outer">
+                      <div className={`hm-bar-inner ${col}`} style={{width:`${pct}%`}}/>
+                    </div>
+                    <span className="hm-cat-count">{pct}% <span className="drill-attempts">({d.attempts})</span></span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CEFR_LABELS = {
   A1:'Beginner', A2:'Elementary', B1:'Intermediate',
   B2:'Upper-Intermediate', C1:'Advanced', C2:'Mastery'
@@ -2075,4 +2308,5 @@ const SendIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const PlusIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="16" height="16"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
 const CefrIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>;
 const PronIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>;
+const DrillIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
 const TrashIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>;
