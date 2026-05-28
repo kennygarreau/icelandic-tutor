@@ -1254,7 +1254,12 @@ When this material is relevant, naturally reference it in your tip or correction
 @app.get("/sessions")
 def list_sessions(limit:int=30):
     with get_db() as db:
-        rows = db.execute("SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?",(limit,)).fetchall()
+        rows = db.execute("""
+            SELECT s.*,
+                   (SELECT icelandic FROM messages WHERE session_id=s.id AND role='assistant'
+                    ORDER BY created_at DESC LIMIT 1) as last_icelandic
+            FROM sessions s ORDER BY s.updated_at DESC LIMIT ?
+        """, (limit,)).fetchall()
     return [dict(r) for r in rows]
 
 @app.get("/sessions/{sid}")
@@ -1280,6 +1285,52 @@ def delete_session(sid:str):
             db.execute(f"DELETE FROM {t} WHERE {col}=?",(sid,))
         db.commit()
     return {"deleted":sid}
+
+class SessionPatch(BaseModel):
+    title: str
+
+@app.patch("/sessions/{sid}")
+def patch_session(sid: str, patch: SessionPatch):
+    with get_db() as db:
+        if not db.execute("SELECT id FROM sessions WHERE id=?", (sid,)).fetchone():
+            raise HTTPException(404, "Not found")
+        db.execute("UPDATE sessions SET title=?, updated_at=? WHERE id=?",
+                   (patch.title.strip(), now_iso(), sid))
+        db.commit()
+    return {"id": sid, "title": patch.title.strip()}
+
+SESSION_TITLE_PROMPT = """Generate a short English title (3-6 words, no quotes, no trailing punctuation) for this Icelandic tutoring conversation.
+Focus on the main topic or activity discussed.
+Examples: "Ordering food at a café", "Past tense verb practice", "Weather vocabulary", "Getting directions in Reykjavík"
+
+User said: {user_msg}
+Tutor responded about: {assistant_msg}
+
+Return only the title, nothing else."""
+
+@app.post("/sessions/{sid}/generate-title")
+async def generate_session_title(sid: str):
+    with get_db() as db:
+        if not db.execute("SELECT id FROM sessions WHERE id=?", (sid,)).fetchone():
+            raise HTTPException(404, "Not found")
+        msgs = db.execute(
+            "SELECT role, content, icelandic FROM messages WHERE session_id=? ORDER BY created_at LIMIT 2",
+            (sid,)
+        ).fetchall()
+    if not msgs:
+        raise HTTPException(400, "No messages yet")
+    user_msg = next((m["content"] for m in msgs if m["role"] == "user"), "")
+    asst_msg = next((m["icelandic"] for m in msgs if m["role"] == "assistant"), "")
+    prompt = SESSION_TITLE_PROMPT.format(user_msg=user_msg[:200], assistant_msg=asst_msg[:200])
+    try:
+        raw = await call_llm([{"role": "user", "content": "Generate the title."}], prompt, max_tokens=30)
+    except Exception as e:
+        raise HTTPException(502, f"LLM error: {e}")
+    title = re.sub(r'^["\'\`]|["\'\`]$', '', raw.strip())[:80]
+    with get_db() as db:
+        db.execute("UPDATE sessions SET title=? WHERE id=?", (title, sid))
+        db.commit()
+    return {"id": sid, "title": title}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SCENARIOS

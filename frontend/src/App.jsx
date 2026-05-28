@@ -108,6 +108,7 @@ export default function App(){
 function ChatView(){
   const [messages,  setMessages]  = useState([WELCOME_MSG]);
   const [sessionId,    setSessionId]    = useState(null);
+  const [sessionTitle, setSessionTitle] = useState(null);
   const [level,        setLevel]        = useState('beginner');
   const [loading,      setLoading]      = useState(false);
   const [playingId,    setPlayingId]    = useState(null);
@@ -121,6 +122,12 @@ function ChatView(){
   const [shownTranslations, setShownTranslations] = useState({});
   const [lessonComplete, setLessonComplete] = useState(null);
   const [pdfModal,      setPdfModal]       = useState(null); // {url, title}
+
+  const [drawerOpen,      setDrawerOpen]      = useState(false);
+  const [pastSessions,    setPastSessions]    = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [renamingId,      setRenamingId]      = useState(null);
+  const [renameValue,     setRenameValue]     = useState('');
 
   const chatEndRef     = useRef(null);
   const inputRef       = useRef(null);
@@ -155,6 +162,64 @@ function ChatView(){
 
   // Always-current snapshot — sendMessage reads from here so it needs zero deps
   stateRef.current={messages,level,autoPlay,sessionId,chatMode,speakText};
+
+  const loadPastSessions = async (limit=30) => {
+    setSessionsLoading(true);
+    try{ const d=await fetch(`${API}/sessions?limit=${limit}`).then(r=>r.json()); setPastSessions(d); }
+    catch(e){ console.error(e); }
+    finally{ setSessionsLoading(false); }
+  };
+
+  const openDrawer = () => { loadPastSessions(); setDrawerOpen(true); };
+
+  const loadSession = async (sid) => {
+    try{
+      const data = await fetch(`${API}/sessions/${sid}`).then(r=>r.json());
+      const hydrated = data.messages.map(m => {
+        if(m.role==='user') return {id:m.id, role:'user', text:m.content};
+        return {id:m.id, role:'assistant', icelandic:m.icelandic||'',
+                correction:m.correction||null,
+                english_translation:m.correction?.english_translation||''};
+      });
+      setMessages(hydrated.length ? hydrated : [WELCOME_MSG]);
+      setSessionId(sid);
+      setSessionTitle(data.title||null);
+      setLevel(data.level||'beginner');
+      const lastAsst = [...hydrated].reverse().find(m=>m.role==='assistant');
+      setCorrection(lastAsst?.correction || WELCOME_MSG.correction);
+      setNewVocab([]); setPronScore(null); setLessonComplete(null);
+      if(data.mode==='scenario' && data.scenario_id){
+        const sc = await fetch(`${API}/scenarios/${data.scenario_id}`).then(r=>r.json());
+        setChatMode({mode:'scenario', id:data.scenario_id, label:`🎭 ${sc.title}`, scenarioData:sc});
+      } else if(data.mode==='lesson' && data.lesson_id){
+        const ls = await fetch(`${API}/lessons/${data.lesson_id}`).then(r=>r.json());
+        setChatMode({mode:'lesson', id:data.lesson_id, label:`📖 ${ls.title}`, lessonData:ls});
+      } else {
+        setChatMode({mode:'free', id:null, label:''});
+      }
+      setDrawerOpen(false);
+    }catch(e){ console.error(e); }
+  };
+
+  const renameSession = async (sid, title) => {
+    if(!title.trim()){ setRenamingId(null); return; }
+    try{
+      await fetch(`${API}/sessions/${sid}`,{method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({title:title.trim()})});
+      setPastSessions(prev=>prev.map(s=>s.id===sid?{...s,title:title.trim()}:s));
+    }catch(e){ console.error(e); }
+    setRenamingId(null);
+  };
+
+  const handleDeleteSession = async (sid, e) => {
+    e.stopPropagation();
+    try{
+      await fetch(`${API}/sessions/${sid}`,{method:'DELETE'});
+      setPastSessions(prev=>prev.filter(s=>s.id!==sid));
+      if(stateRef.current.sessionId===sid) newSession();
+    }catch(e){ console.error(e); }
+  };
 
   const beginLesson=(lessonId,lessonTitle)=>{
     setChatMode(c=>({...c,mode:'lesson',id:lessonId}));
@@ -241,6 +306,7 @@ function ChatView(){
   const sendMessage=useCallback(async(text,audioBlob=null)=>{
     const{messages,level,autoPlay,sessionId,chatMode,speakText}=stateRef.current;
     const userText=text.trim();if(!userText)return;
+    const isNewSession=!sessionId;
     const userMsg={id:Date.now(),role:'user',text:userText};
     const nextMessages=[...messages,userMsg];
     setMessages(nextMessages);setLoading(true);setPronScore(null);
@@ -295,6 +361,15 @@ function ChatView(){
             _span.addEvent('stream_done',{'total_ms':Date.now()-_t0});
             _span.setStatus({code:SpanStatusCode.OK});
             if(!sessionId) setSessionId(evt.session_id);
+            if(isNewSession && evt.session_id){
+              fetch(`${API}/sessions/${evt.session_id}/generate-title`,{method:'POST'})
+                .then(r=>r.json())
+                .then(d=>{
+                  setSessionTitle(d.title);
+                  setPastSessions(prev=>prev.map(s=>s.id===evt.session_id?{...s,title:d.title}:s));
+                })
+                .catch(()=>{});
+            }
             setCorrection(evt.english_correction);
             setNewVocab(evt.new_vocabulary||[]);
             setMessages(prev=>prev.map(m=>m.id===streamId
@@ -336,7 +411,7 @@ function ChatView(){
 
   const toggleTranslation=id=>setShownTranslations(prev=>({...prev,[id]:!prev[id]}));
   const newSession=()=>{
-    setMessages([WELCOME_MSG]);setSessionId(null);setCorrection(WELCOME_MSG.correction);
+    setMessages([WELCOME_MSG]);setSessionId(null);setSessionTitle(null);setCorrection(WELCOME_MSG.correction);
     setNewVocab([]);setPronScore(null);setChatMode({mode:'free',id:null,label:''});
   };
 
@@ -345,9 +420,59 @@ function ChatView(){
   return(
     <div className="chat-layout">
       <div className="chat-col">
+        {drawerOpen&&(
+          <>
+            <div className="sessions-backdrop" onClick={()=>setDrawerOpen(false)}/>
+            <div className="sessions-drawer">
+              <div className="sessions-drawer-header">
+                <span className="sessions-drawer-title">Recent Chats</span>
+                <button className="sessions-drawer-close" onClick={()=>setDrawerOpen(false)}>✕</button>
+              </div>
+              <div className="sessions-list">
+                {sessionsLoading&&<div className="empty-state">Loading…</div>}
+                {!sessionsLoading&&pastSessions.length===0&&<div className="empty-state">No past sessions yet.</div>}
+                {pastSessions.map(s=>(
+                  <div key={s.id} className={`session-item ${s.id===sessionId?'active':''}`}
+                       onClick={()=>renamingId!==s.id&&loadSession(s.id)}>
+                    <div className="session-item-body">
+                      {renamingId===s.id?(
+                        <input className="session-rename-input" value={renameValue} autoFocus
+                          onChange={e=>setRenameValue(e.target.value)}
+                          onBlur={()=>renameSession(s.id,renameValue)}
+                          onKeyDown={e=>{
+                            if(e.key==='Enter') renameSession(s.id,renameValue);
+                            if(e.key==='Escape') setRenamingId(null);
+                            e.stopPropagation();
+                          }}
+                          onClick={e=>e.stopPropagation()}
+                        />
+                      ):(
+                        <span className="session-item-title"
+                          onDoubleClick={e=>{e.stopPropagation();setRenamingId(s.id);setRenameValue(s.title||'');}}
+                          title="Double-click to rename">
+                          {s.title||'Untitled session'}
+                        </span>
+                      )}
+                      <div className="session-item-meta">
+                        {s.mode!=='free'&&<span className="session-mode-badge">{s.mode}</span>}
+                        <span className="session-date">{s.updated_at?.slice(0,10)}</span>
+                        <span className="session-turns">{s.turn_count} turns</span>
+                      </div>
+                      {s.last_icelandic&&renamingId!==s.id&&(
+                        <p className="session-preview">{s.last_icelandic.slice(0,70)}{s.last_icelandic.length>70?'…':''}</p>
+                      )}
+                    </div>
+                    <button className="session-delete-btn" onClick={e=>handleDeleteSession(s.id,e)} title="Delete">✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
         <div className="chat-topbar">
           <div className="chat-topbar-left">
-            <span className="topbar-title">Conversation</span>
+            <button className="history-btn" onClick={openDrawer} title="Chat history"><HistoryIcon/></button>
+            <span className="topbar-title">{sessionTitle||'Conversation'}</span>
             {chatMode.label&&<span className="mode-badge">{chatMode.label}</span>}
             {sessionId&&!chatMode.label&&<span className="session-badge">Active</span>}
           </div>
@@ -2309,4 +2434,5 @@ const PlusIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const CefrIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>;
 const PronIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>;
 const DrillIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
+const HistoryIcon =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="16" height="16"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg>;
 const TrashIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>;
