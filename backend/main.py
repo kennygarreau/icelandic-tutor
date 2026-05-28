@@ -51,6 +51,9 @@ LLM_PROVIDER    = os.getenv("LLM_PROVIDER",    "anthropic")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL",    "qwen2.5:72b")
 ANTHROPIC_KEY   = os.getenv("ANTHROPIC_API_KEY", "")
+LITELLM_URL     = os.getenv("LITELLM_URL",     "http://localhost:4000")
+LITELLM_KEY     = os.getenv("LITELLM_API_KEY", "sk-anything")
+LITELLM_MODEL   = os.getenv("LITELLM_MODEL",   "ollama/qwen3:32b")
 WHISPER_URL     = os.getenv("WHISPER_URL",     "http://whisper:8001")
 TTS_URL         = os.getenv("TTS_URL",         "http://tts:8002")
 PRONUN_URL      = os.getenv("PRONUN_URL",      "http://whisper:8001")
@@ -775,8 +778,38 @@ async def call_anthropic(messages, system, max_tokens=1500):
         r.raise_for_status()
         return r.json()["content"][0]["text"]
 
+async def call_litellm(messages, system, max_tokens=1500):
+    payload = {"model": LITELLM_MODEL,
+               "messages": [{"role":"system","content":system}]+messages,
+               "max_tokens": max_tokens}
+    headers = {"Authorization": f"Bearer {LITELLM_KEY}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=270) as c:
+        r = await c.post(f"{LITELLM_URL}/chat/completions", json=payload, headers=headers)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
+
+async def stream_litellm(messages, system):
+    payload = {"model": LITELLM_MODEL,
+               "messages": [{"role":"system","content":system}]+messages,
+               "stream": True}
+    headers = {"Authorization": f"Bearer {LITELLM_KEY}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=270) as c:
+        async with c.stream("POST", f"{LITELLM_URL}/chat/completions",
+                            json=payload, headers=headers) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: ") or line == "data: [DONE]":
+                    continue
+                try:
+                    token = json.loads(line[6:])["choices"][0]["delta"].get("content","")
+                    if token:
+                        yield token
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+
 async def call_llm(messages, system, max_tokens=1500):
-    if LLM_PROVIDER=="ollama": return await call_ollama(messages,system,max_tokens)
+    if LLM_PROVIDER=="ollama":    return await call_ollama(messages,system,max_tokens)
+    if LLM_PROVIDER=="litellm":   return await call_litellm(messages,system,max_tokens)
     return await call_anthropic(messages,system,max_tokens)
 
 def _unescaped_quote(s):
@@ -832,6 +865,9 @@ async def stream_anthropic(messages, system):
 async def stream_llm(messages, system):
     if LLM_PROVIDER == "ollama":
         async for chunk in stream_ollama(messages, system):
+            yield chunk
+    elif LLM_PROVIDER == "litellm":
+        async for chunk in stream_litellm(messages, system):
             yield chunk
     else:
         async for chunk in stream_anthropic(messages, system):
