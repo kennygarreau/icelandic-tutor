@@ -228,7 +228,7 @@ function ChatView(){
     const streamId=Date.now()+1;
     const level=stateRef.current.level;
     fetch(`${API}/chat/stream`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({session_id:null,messages:[{role:'user',content:'Byrjum!'}],level,mode:'lesson',lesson_id:lessonId})})
+      body:JSON.stringify({session_id:null,messages:[{role:'user',content:'Kenndu mér efni þessarar kennslustundar.'}],level,mode:'lesson',lesson_id:lessonId})})
     .then(async resp=>{
       if(!resp.ok){setLoading(false);return;}
       const reader=resp.body.getReader();const decoder=new TextDecoder();let buf='';let started=false;
@@ -1309,7 +1309,7 @@ function FlashcardsView(){
   const loadCards=async()=>{
     setLoading(true);
     const[all,due]=await Promise.all([
-      fetch(`${API}/flashcards`).then(r=>r.json()),
+      fetch(`${API}/flashcards?limit=500`).then(r=>r.json()),
       fetch(`${API}/flashcards?due_only=true`).then(r=>r.json()),
     ]);
     setCards(all);setDueCards(due);setLoading(false);
@@ -1320,13 +1320,19 @@ function FlashcardsView(){
   const reviewCard=dueCards[reviewIdx];
 
   const handleReview=async(correct)=>{
+    const cardId=reviewCard.id;
     setRevResult(correct?'correct':'incorrect');
-    await fetch(`${API}/flashcards/${reviewCard.id}/review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:reviewCard.id,correct})});
-    setTimeout(()=>{
-      setShowAns(false);setRevResult(null);setFcPronScore(null);
-      if(reviewIdx+1>=dueCards.length){loadCards();setReviewIdx(0);setMode('browse');}
-      else setReviewIdx(i=>i+1);
-    },700);
+    await fetch(`${API}/flashcards/${cardId}/review`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({card_id:cardId,correct})});
+    // Remove the reviewed card from dueCards immediately so the badge reflects reality
+    setDueCards(prev=>{
+      const next=prev.filter(c=>c.id!==cardId);
+      setTimeout(()=>{
+        setShowAns(false);setRevResult(null);setFcPronScore(null);
+        if(next.length===0){loadCards();setReviewIdx(0);setMode('browse');}
+        else setReviewIdx(i=>Math.min(i,next.length-1));
+      },700);
+      return next;
+    });
   };
 
   const handleAdd=async(e)=>{
@@ -1435,24 +1441,25 @@ function FlashcardsView(){
               <button className="pill active" onClick={()=>setMode('browse')}>Browse cards</button>
             </div>
           ):(
-            <div className={`flashcard ${showAns?'flipped':''} ${revResult||''}`}>
+            <div className={`flashcard ${showAns?'flipped':''} ${revResult||''}`} onClick={()=>{if(!showAns)setShowAns(true);}}>
               <div className="fc-progress">{reviewIdx+1} / {dueCards.length}</div>
               <div className="fc-front">
                 <span className="fc-category">{reviewCard?.category}</span>
                 {reviewCard?.part_of_speech&&<span className="fc-pos">{reviewCard.part_of_speech}</span>}
                 <div className="fc-word-row">
                   <p className="fc-word icelandic">{reviewCard?.icelandic}</p>
-                  <button className="fc-play-btn" onClick={()=>playWord(reviewCard?.icelandic)} title="Listen">
+                  <button className="fc-play-btn" onClick={e=>{e.stopPropagation();playWord(reviewCard?.icelandic);}} title="Listen">
                     <SpeakerIcon/>
                   </button>
                 </div>
                 <div className="fc-pron-row">
                   <button
                     className={`fc-mic-btn ${fcRecording?'recording':''}`}
-                    onMouseDown={e=>{e.preventDefault();if(!fcRecording)startFcRecording();}}
-                    onMouseUp={e=>{e.preventDefault();if(fcRecording)stopFcRecording(reviewCard?.icelandic);}}
-                    onTouchStart={e=>{e.preventDefault();if(!fcRecording)startFcRecording();}}
-                    onTouchEnd={e=>{e.preventDefault();if(fcRecording)stopFcRecording(reviewCard?.icelandic);}}
+                    onClick={e=>e.stopPropagation()}
+                    onMouseDown={e=>{e.preventDefault();e.stopPropagation();if(!fcRecording)startFcRecording();}}
+                    onMouseUp={e=>{e.preventDefault();e.stopPropagation();if(fcRecording)stopFcRecording(reviewCard?.icelandic);}}
+                    onTouchStart={e=>{e.preventDefault();e.stopPropagation();if(!fcRecording)startFcRecording();}}
+                    onTouchEnd={e=>{e.preventDefault();e.stopPropagation();if(fcRecording)stopFcRecording(reviewCard?.icelandic);}}
                     title={fcRecording?'Release to score':'Hold to speak'}
                   >
                     {fcRecording?<MicActiveIcon/>:<MicIcon/>}
