@@ -405,6 +405,18 @@ input,textarea{font-family:inherit;color:inherit}
 .form-group label{font-size:.8rem;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:.05em;text-transform:uppercase}
 .form-group input{background:var(--raised);border:1px solid var(--border);border-radius:var(--r);padding:.6rem .85rem;font-size:.97rem;outline:none;transition:border-color var(--tr)}
 .form-group input:focus{border-color:rgba(168,200,232,.45)}.form-actions{display:flex;gap:.6rem;margin-top:.4rem}
+.fc-section-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0}
+.fc-section-tab{flex:1;padding:.6rem 1rem;font-family:'Cinzel',serif;font-size:.82rem;font-weight:600;letter-spacing:.05em;color:var(--muted);border-bottom:2px solid transparent;transition:all var(--tr);display:flex;align-items:center;justify-content:center;gap:.5rem}
+.fc-section-tab:hover{color:var(--text)}.fc-section-tab.active{color:var(--ice-bright);border-bottom-color:var(--ice)}
+.fc-sec-count{background:var(--raised);border:1px solid var(--border);border-radius:10px;font-size:.65rem;padding:.05rem .35rem;color:var(--muted)}
+.fc-section-tab.active .fc-sec-count{background:rgba(168,200,232,.12);border-color:rgba(168,200,232,.3);color:var(--ice)}
+.fc-prompt-label{font-size:.8rem;color:var(--muted);font-style:italic;margin-bottom:.25rem}
+.sentence-cards-list{display:flex;flex-direction:column;gap:.7rem}
+.sentence-card-item{padding:1rem 1.1rem;border-radius:var(--r);border:1px solid var(--border);background:var(--raised);display:flex;flex-direction:column;gap:.4rem}
+.sentence-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:.1rem}
+.sentence-card-tts{display:flex;align-items:center}
+.sentence-card-is{font-size:1.05rem;font-style:italic;color:var(--ice-bright);line-height:1.4}
+.sentence-card-en{font-size:.88rem;color:var(--aurora-g)}
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.8rem}
 .card-item{padding:.9rem 1rem;border-radius:var(--r);border:1px solid var(--border);background:var(--raised);display:flex;flex-direction:column;gap:.35rem}
 .card-item-top{display:flex;align-items:center;justify-content:space-between}

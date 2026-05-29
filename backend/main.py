@@ -733,6 +733,21 @@ Return ONLY a JSON array, no markdown:
 [{{"icelandic":"...","english":"...","notes":"...","category":"vocabulary|grammar|phrase","part_of_speech":"noun|verb|adjective|adverb|preposition|conjunction|pronoun|phrase|other"}}]
 """
 
+SENTENCE_GEN_PROMPT = """You are an Icelandic language expert. Generate exactly {count} common Icelandic sentence flashcards for a {level} learner on the situation: {topic}.
+
+Return ONLY a valid JSON array, no markdown:
+[{{"icelandic":"Full Icelandic sentence","english":"Natural English equivalent","notes":"One-sentence grammar or usage note, or empty string","category":"sentence"}}]
+
+Guidelines:
+- Use natural, conversational Icelandic (not textbook-formal)
+- Sentence length: 4–15 words
+- beginner: present tense, simple common structures, high-frequency vocabulary
+- intermediate: various tenses, modal verbs, common idioms and prepositions
+- advanced: complex clauses, subjunctive mood, nuanced register and vocabulary
+- Mix questions, statements, and requests in roughly equal proportion
+- notes: highlight one interesting grammar point (e.g. "Uses dative experiencer construction" or "Subjunctive after 'ef'"); leave empty string if nothing notable
+- Never duplicate icelandic content within the batch"""
+
 HEATMAP_ANALYSIS_PROMPT = """You are an Icelandic language expert analyzing a student's error patterns.
 
 Given these error records, identify:
@@ -1036,6 +1051,7 @@ class FlashcardCreate(BaseModel):
 class FlashcardGenReq(BaseModel):
     count: int = 10; level: str = "beginner"
     topic: str = "common greetings and everyday vocabulary"
+    type: str = "vocabulary"  # vocabulary | sentence
 
 class LessonProgressUpdate(BaseModel):
     lesson_id: str; completed: bool; score: int = 0; session_id: Optional[str]=None
@@ -1767,7 +1783,10 @@ def submit_quiz_results(req: QuizResultsReq):
 
 @app.post("/flashcards/generate")
 async def generate_flashcards(req:FlashcardGenReq):
-    system=FLASHCARD_GEN_PROMPT.format(count=req.count,level=req.level,topic=req.topic)
+    if req.type == "sentence":
+        system = SENTENCE_GEN_PROMPT.format(count=req.count, level=req.level, topic=req.topic)
+    else:
+        system=FLASHCARD_GEN_PROMPT.format(count=req.count,level=req.level,topic=req.topic)
     try: raw=await call_llm([{"role":"user","content":"Generate now."}],system,2000)
     except Exception as e: raise HTTPException(502,f"LLM error: {e}")
     try: cards_data=json.loads(extract_json(raw))

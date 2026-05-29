@@ -1304,7 +1304,10 @@ function ProgressView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // FLASHCARDS VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
+const SENTENCE_CATS = ['phrase','sentence'];
+
 function FlashcardsView(){
+  const [section,setSection]=useState('vocabulary'); // 'vocabulary' | 'sentences'
   const [mode,setMode]=useState('browse');const [cards,setCards]=useState([]);const [dueCards,setDueCards]=useState([]);
   const [loading,setLoading]=useState(true);const [filter,setFilter]=useState('all');const [posFilter,setPosFilter]=useState('all');
   const [newIs,setNewIs]=useState('');const [newEn,setNewEn]=useState('');const [newNote,setNewNote]=useState('');const [newCat,setNewCat]=useState('vocabulary');const [newPos,setNewPos]=useState('');
@@ -1327,8 +1330,13 @@ function FlashcardsView(){
   };
   useEffect(()=>{loadCards();},[]);
 
-  const filtered=cards.filter(c=>(filter==='all'||c.category===filter)&&(posFilter==='all'||c.part_of_speech===posFilter));
-  const reviewCard=dueCards[reviewIdx];
+  const isSentSec = section==='sentences';
+  const sectionCards    = isSentSec ? cards.filter(c=>SENTENCE_CATS.includes(c.category))    : cards.filter(c=>!SENTENCE_CATS.includes(c.category));
+  const sectionDueCards = isSentSec ? dueCards.filter(c=>SENTENCE_CATS.includes(c.category)) : dueCards.filter(c=>!SENTENCE_CATS.includes(c.category));
+  const filtered = isSentSec
+    ? sectionCards.filter(c=>filter==='all'||c.category===filter)
+    : sectionCards.filter(c=>(filter==='all'||c.category===filter)&&(posFilter==='all'||c.part_of_speech===posFilter));
+  const reviewCard=sectionDueCards[reviewIdx];
 
   const handleReview=async(correct)=>{
     const cardId=reviewCard.id;
@@ -1357,7 +1365,7 @@ function FlashcardsView(){
   const handleGenerate=async()=>{
     setGenLoading(true);
     await fetch(`${API}/flashcards/generate`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({count:genCount,level:genLevel,topic:genTopic})});
+      body:JSON.stringify({count:genCount,level:genLevel,topic:genTopic,type:isSentSec?'sentence':'vocabulary'})});
     await loadCards();setGenLoading(false);setMode('browse');
   };
 
@@ -1431,29 +1439,67 @@ function FlashcardsView(){
       <div className="page-header">
         <h2 className="page-title">Flashcards</h2>
         <div className="fc-header-actions">
-          <span className="badge">{dueCards.length} due</span>
-          <span className="badge badge-muted">{cards.length} total</span>
+          <span className="badge">{sectionDueCards.length} due</span>
+          <span className="badge badge-muted">{sectionCards.length} total</span>
           <div className="level-pills">
-            {['browse','review','quiz','add','generate'].map(m=>(
+            {(isSentSec?['browse','review','add','generate']:['browse','review','quiz','add','generate']).map(m=>(
               <button key={m} className={`pill ${mode===m?'active':''}`} onClick={()=>{setMode(m);setReviewIdx(0);setShowAns(false);if(m==='quiz')setQuizState('start');}}>
                 {m.charAt(0).toUpperCase()+m.slice(1)}
-                {m==='review'&&dueCards.length>0&&<span className="pill-badge">{dueCards.length}</span>}
+                {m==='review'&&sectionDueCards.length>0&&<span className="pill-badge">{sectionDueCards.length}</span>}
               </button>
             ))}
           </div>
         </div>
       </div>
 
+      <div className="fc-section-tabs">
+        <button className={`fc-section-tab ${!isSentSec?'active':''}`}
+          onClick={()=>{setSection('vocabulary');setMode('browse');setReviewIdx(0);setShowAns(false);setFilter('all');setPosFilter('all');setNewCat('vocabulary');}}>
+          Vocabulary
+          <span className="fc-sec-count">{cards.filter(c=>!SENTENCE_CATS.includes(c.category)).length}</span>
+        </button>
+        <button className={`fc-section-tab ${isSentSec?'active':''}`}
+          onClick={()=>{setSection('sentences');setMode('browse');setReviewIdx(0);setShowAns(false);setFilter('all');setNewCat('sentence');}}>
+          Sentences
+          <span className="fc-sec-count">{cards.filter(c=>SENTENCE_CATS.includes(c.category)).length}</span>
+        </button>
+      </div>
+
       {mode==='review'&&(
         <div className="review-area">
-          {dueCards.length===0?(
+          {sectionDueCards.length===0?(
             <div className="review-done">
-              <div className="done-icon">✦</div><h3>All caught up!</h3><p>No cards due.</p>
-              <button className="pill active" onClick={()=>setMode('browse')}>Browse cards</button>
+              <div className="done-icon">✦</div><h3>All caught up!</h3><p>No {isSentSec?'sentences':'cards'} due.</p>
+              <button className="pill active" onClick={()=>setMode('browse')}>Browse {isSentSec?'sentences':'cards'}</button>
+            </div>
+          ):isSentSec?(
+            /* ── Sentence flip card — English front, Icelandic back ── */
+            <div className={`flashcard ${showAns?'flipped':''} ${revResult||''}`} onClick={()=>{if(!showAns)setShowAns(true);}}>
+              <div className="fc-progress">{reviewIdx+1} / {sectionDueCards.length}</div>
+              <div className="fc-front">
+                <p className="fc-prompt-label">How do you say this in Icelandic?</p>
+                <p className="fc-word">{reviewCard?.english}</p>
+                <button className="fc-reveal-btn" onClick={e=>{e.stopPropagation();setShowAns(true);}}>Reveal Icelandic</button>
+              </div>
+              {showAns&&(
+                <div className="fc-back">
+                  <div className="fc-word-row">
+                    <p className="fc-word icelandic">{reviewCard?.icelandic}</p>
+                    <button className="fc-play-btn" onClick={e=>{e.stopPropagation();playWord(reviewCard?.icelandic);}} title="Listen"><SpeakerIcon/></button>
+                  </div>
+                  <p className="fc-translation">{reviewCard?.english}</p>
+                  {reviewCard?.notes&&<p className="fc-notes">{reviewCard.notes}</p>}
+                  <div className="fc-actions">
+                    <button className="fc-btn fc-wrong" onClick={()=>handleReview(false)}><span>✗</span>Again</button>
+                    <button className="fc-btn fc-correct" onClick={()=>handleReview(true)}><span>✓</span>Got it</button>
+                  </div>
+                </div>
+              )}
             </div>
           ):(
+            /* ── Vocabulary flip card — Icelandic front, English back ── */
             <div className={`flashcard ${showAns?'flipped':''} ${revResult||''}`} onClick={()=>{if(!showAns)setShowAns(true);}}>
-              <div className="fc-progress">{reviewIdx+1} / {dueCards.length}</div>
+              <div className="fc-progress">{reviewIdx+1} / {sectionDueCards.length}</div>
               <div className="fc-front">
                 <span className="fc-category">{reviewCard?.category}</span>
                 {reviewCard?.part_of_speech&&<span className="fc-pos">{reviewCard.part_of_speech}</span>}
@@ -1479,7 +1525,7 @@ function FlashcardsView(){
                   {fcScoring&&<span className="fc-scoring">Scoring…</span>}
                 </div>
                 {fcPronScore&&<PronunciationPanel score={fcPronScore}/>}
-                <button className="fc-reveal-btn" onClick={()=>setShowAns(true)}>Reveal answer</button>
+                <button className="fc-reveal-btn" onClick={e=>{e.stopPropagation();setShowAns(true);}}>Reveal answer</button>
               </div>
               {showAns&&(
                 <div className="fc-back">
@@ -1593,16 +1639,20 @@ function FlashcardsView(){
 
       {mode==='add'&&(
         <form className="add-card-form" onSubmit={handleAdd}>
-          <h3 className="form-title">Add a flashcard</h3>
-          <div className="form-group"><label>Icelandic</label><input value={newIs} onChange={e=>setNewIs(e.target.value)} placeholder="e.g. Góðan daginn" required/></div>
-          <div className="form-group"><label>English</label><input value={newEn} onChange={e=>setNewEn(e.target.value)} placeholder="e.g. Good morning" required/></div>
-          <div className="form-group"><label>Notes</label><input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder="Grammar note or example"/></div>
-          <div className="form-group"><label>Category</label>
-            <div className="level-pills">{['vocabulary','grammar','phrase'].map(c=><button type="button" key={c} className={`pill ${newCat===c?'active':''}`} onClick={()=>setNewCat(c)}>{c}</button>)}</div>
-          </div>
-          <div className="form-group"><label>Part of speech</label>
-            <div className="level-pills">{POS_LABELS.map(p=><button type="button" key={p} className={`pill ${newPos===p?'active':''}`} onClick={()=>setNewPos(newPos===p?'':p)}>{p}</button>)}</div>
-          </div>
+          <h3 className="form-title">Add a {isSentSec?'sentence':'flashcard'}</h3>
+          <div className="form-group"><label>{isSentSec?'Icelandic sentence':'Icelandic'}</label><input value={newIs} onChange={e=>setNewIs(e.target.value)} placeholder={isSentSec?'e.g. Hvernig hefur þú það í dag?':'e.g. Góðan daginn'} required/></div>
+          <div className="form-group"><label>{isSentSec?'English equivalent':'English'}</label><input value={newEn} onChange={e=>setNewEn(e.target.value)} placeholder={isSentSec?'e.g. How are you today?':'e.g. Good morning'} required/></div>
+          <div className="form-group"><label>Notes</label><input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder={isSentSec?'Grammar note (optional)':'Grammar note or example'}/></div>
+          {!isSentSec&&(
+            <>
+              <div className="form-group"><label>Category</label>
+                <div className="level-pills">{['vocabulary','grammar','phrase'].map(c=><button type="button" key={c} className={`pill ${newCat===c?'active':''}`} onClick={()=>setNewCat(c)}>{c}</button>)}</div>
+              </div>
+              <div className="form-group"><label>Part of speech</label>
+                <div className="level-pills">{POS_LABELS.map(p=><button type="button" key={p} className={`pill ${newPos===p?'active':''}`} onClick={()=>setNewPos(newPos===p?'':p)}>{p}</button>)}</div>
+              </div>
+            </>
+          )}
           <div className="form-actions">
             <button type="button" className="pill" onClick={()=>setMode('browse')}>Cancel</button>
             <button type="submit" className="pill active">Save</button>
@@ -1612,45 +1662,66 @@ function FlashcardsView(){
 
       {mode==='generate'&&(
         <div className="add-card-form">
-          <h3 className="form-title">Generate cards with AI</h3>
-          <div className="form-group"><label>Topic</label><input value={genTopic} onChange={e=>setGenTopic(e.target.value)}/></div>
+          <h3 className="form-title">Generate {isSentSec?'sentences':'cards'} with AI</h3>
+          <div className="form-group"><label>{isSentSec?'Situation / topic':'Topic'}</label>
+            <input value={genTopic} onChange={e=>setGenTopic(e.target.value)}
+              placeholder={isSentSec?'e.g. ordering at a café, asking for directions':'e.g. common greetings and everyday phrases'}/>
+          </div>
           <div className="form-group"><label>Count</label><input type="number" min="5" max="30" value={genCount} onChange={e=>setGenCount(parseInt(e.target.value))}/></div>
           <div className="form-group"><label>Level</label>
             <div className="level-pills">{LEVELS.map(l=><button type="button" key={l} className={`pill ${genLevel===l?'active':''}`} onClick={()=>setGenLevel(l)}>{l}</button>)}</div>
           </div>
           <div className="form-actions">
             <button className="pill" onClick={()=>setMode('browse')}>Cancel</button>
-            <button className="pill active" onClick={handleGenerate} disabled={genLoading}>{genLoading?'Generating…':`Generate ${genCount} cards`}</button>
+            <button className="pill active" onClick={handleGenerate} disabled={genLoading}>{genLoading?'Generating…':`Generate ${genCount} ${isSentSec?'sentences':'cards'}`}</button>
           </div>
         </div>
       )}
 
       {mode==='browse'&&(
         <>
-          <div className="filter-row">
-            {['all','vocabulary','grammar','phrase'].map(f=>(
-              <button key={f} className={`pill ${filter===f?'active':''}`} onClick={()=>setFilter(f)}>
-                {f.charAt(0).toUpperCase()+f.slice(1)}
-                <span className="pill-count">{f==='all'?cards.length:cards.filter(c=>c.category===f).length}</span>
-              </button>
-            ))}
-          </div>
-          <div className="filter-row">
-            {['all',...POS_LABELS].map(p=>{
-              const cnt=p==='all'?cards.length:cards.filter(c=>c.part_of_speech===p).length;
-              if(p!=='all'&&cnt===0)return null;
-              return(
-                <button key={p} className={`pill ${posFilter===p?'active':''}`} onClick={()=>setPosFilter(p)}>
-                  {p.charAt(0).toUpperCase()+p.slice(1)}
-                  <span className="pill-count">{cnt}</span>
-                </button>
-              );
-            })}
-          </div>
-          {filtered.length===0&&<div className="empty-state">No cards yet!</div>}
-          <div className="cards-grid">
+          {!isSentSec&&(
+            <>
+              <div className="filter-row">
+                {['all','vocabulary','grammar','phrase'].map(f=>(
+                  <button key={f} className={`pill ${filter===f?'active':''}`} onClick={()=>setFilter(f)}>
+                    {f.charAt(0).toUpperCase()+f.slice(1)}
+                    <span className="pill-count">{f==='all'?sectionCards.length:sectionCards.filter(c=>c.category===f).length}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="filter-row">
+                {['all',...POS_LABELS].map(p=>{
+                  const cnt=p==='all'?sectionCards.length:sectionCards.filter(c=>c.part_of_speech===p).length;
+                  if(p!=='all'&&cnt===0)return null;
+                  return(
+                    <button key={p} className={`pill ${posFilter===p?'active':''}`} onClick={()=>setPosFilter(p)}>
+                      {p.charAt(0).toUpperCase()+p.slice(1)}
+                      <span className="pill-count">{cnt}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {filtered.length===0&&<div className="empty-state">No {isSentSec?'sentences':'cards'} yet — try Generate!</div>}
+          <div className={isSentSec?'sentence-cards-list':'cards-grid'}>
             {filtered.map(card=>(
-              <div key={card.id} className="card-item">
+              <div key={card.id} className={isSentSec?'sentence-card-item':'card-item'}>
+                {isSentSec?(
+                  <>
+                    <div className="sentence-card-top">
+                      <div className="sentence-card-tts">
+                        <button className="card-play-btn" onClick={()=>playWord(card.icelandic)} title="Listen"><SpeakerIcon/></button>
+                      </div>
+                      <button className="delete-btn" onClick={()=>handleDelete(card.id)}><TrashIcon/></button>
+                    </div>
+                    <p className="sentence-card-is icelandic">{card.icelandic}</p>
+                    <p className="sentence-card-en">{card.english}</p>
+                    {card.notes&&<p className="card-note">{card.notes}</p>}
+                  </>
+                ):(
+                  <>
                 <div className="card-item-top">
                   <span className="fc-category">{card.category}</span>
                   {card.part_of_speech&&<span className="fc-pos">{card.part_of_speech}</span>}
@@ -1669,6 +1740,8 @@ function FlashcardsView(){
                   <span>{card.times_correct} correct</span>
                   <span className={card.due_date<=new Date().toISOString().slice(0,10)?'due-now':''}>{card.due_date}</span>
                 </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
