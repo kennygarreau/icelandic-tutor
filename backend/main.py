@@ -710,6 +710,24 @@ Extract 0-3 vocabulary items per turn.
 Keep Icelandic responses concise (2-4 sentences).
 """
 
+LESSON_TEACHING_RULES = """
+LESSON TEACHING RULES — obey every turn without exception:
+
+1. TEACH BEFORE TESTING — Never ask the student to produce a word, phrase, or grammatical construction you have not explicitly shown them WITH an English meaning in this conversation. If you want them to say it, you must model it first.
+
+2. WORKED EXAMPLE BEFORE EVERY PRODUCTION TASK — Before asking the student to produce anything, give a complete filled-in example sentence: e.g. "For instance: 'Ég er þrjátíu ára gamall' means 'I am thirty years old'. Now you try with your actual age."
+
+3. ONE CONCEPT AT A TIME — Introduce a single item or pattern per beat. Wait for the student to demonstrate they have it before moving to the next. Do not front-load multiple new things in one turn during practice.
+
+4. NARRATE EVERY TRANSITION — When the student masters a micro-goal, explicitly name the achievement and announce what comes next: "You've got 1–5 — nicely done. Now let's do 6–10. Here they are: ..." Never raise the bar silently.
+
+5. RETEACH ON REPEATED ERRORS — If the student makes the same error twice in a row, stop, rephrase the underlying rule, and give a fresh worked example before asking them to try again. Do not simply correct and continue.
+
+6. VOCABULARY BOUNDARY — Only ask the student to use vocabulary from this lesson's declared pool or universally safe basics (Halló, Ég, þú, vera, takk). Do not introduce vocabulary in passing without explicitly teaching it first.
+
+7. NEVER STRAND THE STUDENT — If a task requires knowledge the student does not yet have, provide that knowledge in the same turn before asking. A student who cannot answer is not failing — the lesson scaffolding has failed them.
+"""
+
 FLASHCARD_GEN_PROMPT = """Icelandic language expert. Generate {count} flashcards for a {level} learner on: {topic}
 Return ONLY a JSON array, no markdown:
 [{{"icelandic":"...","english":"...","notes":"...","category":"vocabulary|grammar|phrase","part_of_speech":"noun|verb|adjective|adverb|preposition|conjunction|pronoun|phrase|other"}}]
@@ -878,7 +896,36 @@ def parse_json(raw):
     except: return {"icelandic":raw,"english_correction":{"errors":[],"positive":"","tip":""},
                     "difficulty_assessment":"beginner","new_vocabulary":[],"lesson_progress":{}}
 
-def build_system_prompt(mode, scenario_id, lesson_id, level):
+def _lesson_phase(user_turn_count: int) -> tuple[str, str]:
+    """Return (phase_name, phase_instruction) based on how many user turns have elapsed."""
+    if user_turn_count <= 1:
+        return (
+            "INTRODUCTION",
+            "You are in the INTRODUCTION phase. Your job this turn is to TEACH, not to test. "
+            "Present every vocabulary item and grammar pattern listed below with its English meaning. "
+            "Model at least two complete example sentences. "
+            "End your turn with a warm invitation to try ONE simple thing — but only after all material has been presented."
+        )
+    elif user_turn_count <= 4:
+        return (
+            "GUIDED PRACTICE",
+            "You are in the GUIDED PRACTICE phase. Vocabulary has been introduced. "
+            "Practice each item in isolation: model the target form first, then ask the student to reproduce it "
+            "or use it in a simple slot-fill. One concept per beat. "
+            "Always give a complete worked example immediately before each production task."
+        )
+    else:
+        return (
+            "FREE PRACTICE",
+            "You are in the FREE PRACTICE phase. The student has seen all lesson material. "
+            "Engage in natural conversational practice using the lesson vocabulary and grammar in context. "
+            "When the student struggles, explicitly reference what was taught "
+            "('Remember: Ég er X ára — now try with your own age'). "
+            "Work toward completing the lesson goal."
+        )
+
+
+def build_system_prompt(mode, scenario_id, lesson_id, level, user_turn_count: int = 0):
     system = BASE_SYSTEM
     if mode=="scenario" and scenario_id:
         sc = next((s for s in SCENARIOS if s["id"]==scenario_id), None)
@@ -888,11 +935,15 @@ def build_system_prompt(mode, scenario_id, lesson_id, level):
     elif mode=="lesson" and lesson_id:
         ls = next((l for l in LESSONS if l["id"]==lesson_id), None)
         if ls:
-            system += f"\n\nLESSON MODE — {ls['title']}\nGrammar focus: {ls['grammar_focus']}\n"
-            system += f"Lesson goal: {ls['goal']}\n{ls['system_addon']}\n"
-            system += f"Key vocabulary: {', '.join(ls['vocabulary'])}\n"
+            phase_name, phase_instruction = _lesson_phase(user_turn_count)
+            system += f"\n\nLESSON MODE — {ls['title']}\n"
+            system += f"Grammar focus: {ls['grammar_focus']}\n"
+            system += f"Lesson goal: {ls['goal']}\n"
+            system += f"Lesson-specific guidance: {ls['system_addon']}\n"
+            system += f"\nVOCABULARY POOL (the only new words you may use or test this lesson):\n{', '.join(ls['vocabulary'])}\n"
+            system += f"\nCURRENT PHASE ({user_turn_count} user turn(s) completed): {phase_name}\n{phase_instruction}\n"
             system += "\nTrack goal_percent (0-100) and set goal_met=true when the student has achieved the lesson goal."
-            system += "\n\nCRITICAL INSTRUCTION: When the student sends any opening message to start the lesson, do NOT respond with a greeting or social exchange. Your FIRST response MUST immediately begin teaching the material as described above — present vocabulary, grammar rules, or cultural content with English meanings before asking the student to produce anything."
+            system += LESSON_TEACHING_RULES
     system += f"\n\n[Student level: {level}]"
     return system
 
@@ -1013,8 +1064,10 @@ async def chat(req: ChatRequest):
                        (sid,title,req.level,req.mode,req.scenario_id,req.lesson_id,now_iso(),now_iso()))
             db.commit()
 
-    system = build_system_prompt(req.mode, req.scenario_id, req.lesson_id, req.level)
-    msgs = [{"role":m.role,"content":m.content} for m in req.messages[-6:]]
+    user_turn_count = sum(1 for m in req.messages if m.role == "user")
+    system = build_system_prompt(req.mode, req.scenario_id, req.lesson_id, req.level, user_turn_count)
+    window = 12 if req.mode == "lesson" else 6
+    msgs = [{"role":m.role,"content":m.content} for m in req.messages[-window:]]
 
     # Collect RAG result — has been running concurrently during the sync work above.
     rag_sources = []
@@ -1102,8 +1155,10 @@ async def chat_stream(req: ChatRequest):
                        (sid,title,req.level,req.mode,req.scenario_id,req.lesson_id,now_iso(),now_iso()))
             db.commit()
 
-    system = build_system_prompt(req.mode, req.scenario_id, req.lesson_id, req.level)
-    msgs = [{"role":m.role,"content":m.content} for m in req.messages[-6:]]
+    user_turn_count = sum(1 for m in req.messages if m.role == "user")
+    system = build_system_prompt(req.mode, req.scenario_id, req.lesson_id, req.level, user_turn_count)
+    window = 12 if req.mode == "lesson" else 6
+    msgs = [{"role":m.role,"content":m.content} for m in req.messages[-window:]]
 
     rag_sources = []
     if rag_task:
