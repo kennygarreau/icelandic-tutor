@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -299,5 +300,29 @@ async def startup_ingest():
             ingest_pdf(str(pdf))
         except Exception as e:
             logger.error(f"Startup ingest error for {pdf.name}: {e}")
+
+@app.get("/pdfs/{filename}/page/{page_num}")
+async def get_pdf_page_image(filename: str, page_num: int):
+    """Render a single PDF page as a PNG image — works on all devices."""
+    if "/" in filename or ".." in filename or not filename.endswith(".pdf"):
+        raise HTTPException(400, "Invalid filename")
+    pdf_path = Path(PDFS_DIR) / filename
+    if not pdf_path.exists():
+        raise HTTPException(404, "PDF not found")
+    try:
+        import fitz
+        doc = fitz.open(str(pdf_path))
+        page_idx = max(0, page_num - 1)  # 1-based to 0-based
+        if page_idx >= len(doc):
+            raise HTTPException(400, f"Page {page_num} exceeds document length ({len(doc)})")
+        pix = doc[page_idx].get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
+        img_bytes = pix.tobytes("png")
+        doc.close()
+        return Response(content=img_bytes, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 app.mount("/pdfs", StaticFiles(directory=PDFS_DIR), name="pdfs")

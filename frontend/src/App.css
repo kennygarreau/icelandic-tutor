@@ -489,6 +489,10 @@ input,textarea{font-family:inherit;color:inherit}
 .pdf-modal-close{background:none;border:none;color:var(--muted);font-size:1rem;cursor:pointer;padding:.25rem .5rem;border-radius:4px;transition:color .15s,background .15s}
 .pdf-modal-close:hover{color:var(--fg);background:var(--surface2,#2a2a2a)}
 .pdf-modal-frame{flex:1;width:100%;border:none;background:#fff}
+.pdf-page-view{flex:1;display:flex;flex-direction:column;overflow-y:auto;align-items:center;background:#fff;gap:.75rem;padding:.75rem}
+.pdf-page-img{max-width:100%;height:auto;display:block;box-shadow:0 2px 12px rgba(0,0,0,.25)}
+.pdf-open-link{font-size:.8rem;color:var(--aurora-b);text-decoration:none;padding:.3rem .6rem;border-radius:6px;border:1px solid rgba(56,178,232,.3);transition:all var(--tr)}
+.pdf-open-link:hover{background:rgba(56,178,232,.08)}
 .translate-btn{display:flex;align-items:center;justify-content:center;width:25px;height:25px;border-radius:50%;border:1px solid var(--border);font-size:.75rem;color:var(--muted);transition:all var(--tr)}
 .translate-btn:hover{border-color:var(--gold);color:var(--gold)}
 .translate-btn.active{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.1)}

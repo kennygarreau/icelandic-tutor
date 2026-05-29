@@ -559,11 +559,11 @@ function ChatView(){
                           const titles={'complete_icelandic':'Complete Icelandic',
                             'colloquial-icelandic-the-complete-course-for-beginners':'Colloquial Icelandic'};
                           const title=titles[s.source]||s.source;
-                          const url=`/rag/pdfs/${s.source}.pdf${s.page_number?`#page=${s.page_number}`:''}`;
+                          const url=`/rag/pdfs/${s.source}.pdf`;
                           return(
                             <button key={i} className="rag-source-link"
                               title={`Relevance: ${(s.relevance*100).toFixed(0)}%`}
-                              onClick={()=>setPdfModal({url,title:`${title}${s.page_number?`, p.${s.page_number}`:''}` })}>
+                              onClick={()=>setPdfModal({url,source:`${s.source}.pdf`,pageNum:s.page_number||null,title:`${title}${s.page_number?`, p.${s.page_number}`:''}` })}>
                               📖 {title}{s.page_number?`, p.${s.page_number}`:''}
                             </button>
                           );
@@ -689,7 +689,18 @@ function ChatView(){
               <span className="pdf-modal-title">📖 {pdfModal.title}</span>
               <button className="pdf-modal-close" onClick={()=>setPdfModal(null)}>✕</button>
             </div>
-            <iframe className="pdf-modal-frame" src={pdfModal.url} title={pdfModal.title}/>
+            {pdfModal.pageNum ? (
+              <div className="pdf-page-view">
+                <img className="pdf-page-img"
+                  src={`/rag/pdfs/${pdfModal.source}/page/${pdfModal.pageNum}`}
+                  alt={pdfModal.title}/>
+                <a className="pdf-open-link" href={pdfModal.url} target="_blank" rel="noopener noreferrer">
+                  Open full PDF ↗
+                </a>
+              </div>
+            ) : (
+              <iframe className="pdf-modal-frame" src={pdfModal.url} title={pdfModal.title}/>
+            )}
           </div>
         </div>
       )}
