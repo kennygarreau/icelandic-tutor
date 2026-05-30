@@ -225,6 +225,10 @@ input,textarea{font-family:inherit;color:inherit}
 .pron-letter-pair{display:inline-flex;align-items:baseline;gap:.25rem}
 .pron-letter-lower{font-family:'Crimson Pro',Georgia,serif;font-size:1.1rem;color:var(--gold);letter-spacing:.02em}
 .pron-sounds{color:var(--ice-bright);font-style:italic}
+.pron-examples{display:flex;flex-direction:column;gap:.35rem}
+.pron-example-row{display:flex;align-items:center;gap:.35rem}
+.pron-play-btn{display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--border);color:var(--muted);flex-shrink:0;transition:all var(--tr)}
+.pron-play-btn:hover{border-color:var(--aurora-b);color:var(--aurora-b)}
 .pron-example{color:var(--aurora-b);font-weight:600}
 .pron-example-en{color:var(--muted);font-size:.82rem}
 .pron-note{color:var(--muted);font-size:.82rem}

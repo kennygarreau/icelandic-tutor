@@ -2389,58 +2389,58 @@ const PRON_DATA = {
   vowels: {
     title: 'Vowels',
     rows: [
-      ['Á á', 'ow in "cow"',       'ár (year)',     'á = open back, not "ah"'],
-      ['É é', 'ye in "yes"',       'él (sleet)',    'starts with a y-glide'],
-      ['Í í', 'ee in "feet"',      'ís (ice)',      'same as English "ee", held longer'],
-      ['Ó ó', 'oh — rounded',      'ós (estuary)',  'rounder/tenser than English "oh"'],
-      ['Ú ú', 'oo in "food"',      'úr (drizzle)',  'pure vowel, no glide'],
-      ['Ý ý', 'ee in "feet"',      'ýr (yew)',      'identical to Í'],
-      ['Æ æ', 'eye',               'æðr (vein)',    'pure diphthong, one syllable'],
-      ['Ö ö', 'u in "burn"',       'öld (age)',     'rounded front vowel; purse lips and say "e"'],
+      ['Á á', 'ow in "cow"',    ['ár (year)',       'ást (love)',       'lát (manner)'],       'á = open back, not "ah"'],
+      ['É é', 'ye in "yes"',   ['él (sleet)',      'éta (eat)',        'vél (machine)'],      'starts with a y-glide'],
+      ['Í í', 'ee in "feet"',  ['ís (ice)',        'líf (life)',       'tími (time)'],        'same as English "ee", held longer'],
+      ['Ó ó', 'oh — rounded',  ['ós (estuary)',    'fótur (foot)',     'stór (big)'],         'rounder/tenser than English "oh"'],
+      ['Ú ú', 'oo in "food"',  ['úr (drizzle)',    'hús (house)',      'búa (live)'],         'pure vowel, no glide'],
+      ['Ý ý', 'ee in "feet"',  ['ýr (yew)',        'dýr (animal)',     'ýta (push)'],         'identical to Í'],
+      ['Æ æ', 'eye',           ['læra (learn)',    'mæta (meet)',      'ræða (speech)'],      'pure diphthong, one syllable'],
+      ['Ö ö', 'u in "burn"',   ['önd (duck)',      'öxl (shoulder)',   'þröng (narrow)'],     'rounded front vowel; purse lips and say "e"'],
     ],
   },
   consonants: {
     title: 'Special Consonants',
     rows: [
-      ['Þ þ', 'th in "think"',     'þing (parliament)',  'voiceless — tongue between teeth, no buzz'],
-      ['Ð ð', 'th in "this"',      'að (to)',             'voiced — tongue between teeth, with buzz'],
-      ['G g',  'y before e/i',     'gegn (against)',      'soft g (like "y") before e, i, j'],
-      ['J j',  'y in "yes"',       'já (yes)',            'always a "y" sound, never like English j'],
-      ['R r',  'rolled/trilled',   'rauður (red)',        'tip of tongue taps the ridge behind top teeth'],
-      ['S s',  'always sharp s',   'sama (same)',         'never buzzes like z'],
-      ['X x',  'ks',               'sex (six)',           'always "ks", never "gz"'],
+      ['Þ þ', 'th in "think"',   ['þing (parliament)', 'þakk (thanks)',    'þrír (three)'],     'voiceless — tongue between teeth, no buzz'],
+      ['Ð ð', 'th in "this"',    ['að (to)',            'bað (bath)',       'maður (man)'],      'voiced — tongue between teeth, with buzz'],
+      ['G g', 'y before e/i',    ['gegn (against)',     'gefa (give)',      'gildi (value)'],    'soft g (like "y") before e, i, j'],
+      ['J j', 'y in "yes"',      ['já (yes)',           'jörð (earth)',     'jakki (jacket)'],   'always a "y" sound, never like English j'],
+      ['R r', 'rolled/trilled',  ['rauður (red)',       'rigning (rain)',   'rós (rose)'],       'tip of tongue taps the ridge behind top teeth'],
+      ['S s', 'always sharp s',  ['sama (same)',        'saga (saga)',      'sól (sun)'],        'never buzzes like z'],
+      ['X x', 'ks',              ['sex (six)',          'lax (salmon)',     'buxur (trousers)'], 'always "ks", never "gz"'],
     ],
   },
   clusters: {
     title: 'Consonant Clusters',
     rows: [
-      ['LL',   'voiceless lateral — "tl" with a hiss',  'fjall (mountain)',   'unique to Icelandic/Welsh; tongue sides, air rushes past'],
-      ['RL',   'like "rdl"',                             'karl (man)',         'r colours the l into a retroflex'],
-      ['RN',   'like "rdn"',                             'barn (child)',       'r colours the n; slightly nasal'],
-      ['HV',   'kv',                                     'hvað (what)',        'written hv, always said "kv" in modern Icelandic'],
-      ['GJ',   'y in "yes"',                             'gjöf (gift)',        'the g is silent; only the j/y sound remains'],
-      ['KJ',   'ch — soft palate',                       'kjöt (meat)',        'like "ch" in German "ich"'],
-      ['FN/FJ','bn / bv',                                'fnykur (stench)',    'f becomes voiced b before n or j'],
-      ['NG',   'ng-g (both sounded)',                    'ungur (young)',      'unlike English "sing" — both n and g are audible'],
-      ['NN',   'nasalised / long n',                     'kanna (jug)',        'held longer than a single n'],
+      ['LL',    'voiceless lateral — "tl" with a hiss', ['fjall (mountain)',  'öll (all)',         'hjalli (ledge)'],    'unique to Icelandic/Welsh; tongue sides, air rushes past'],
+      ['RL',    'like "rdl"',                           ['karl (man)',        'harla (very)',      'ferli (process)'],   'r colours the l into a retroflex'],
+      ['RN',    'like "rdn"',                           ['barn (child)',      'þorn (thorn)',      'horn (corner)'],     'r colours the n; slightly nasal'],
+      ['HV',    'kv',                                   ['hvað (what)',       'hvar (where)',      'hvenær (when)'],     'written hv, always said "kv" in modern Icelandic'],
+      ['GJ',    'y in "yes"',                           ['gjöf (gift)',       'gjósa (gush)',      'gjald (fee)'],       'the g is silent; only the j/y sound remains'],
+      ['KJ',    'ch — soft palate',                     ['kjöt (meat)',       'kjósa (choose)',    'kjöll (keel)'],      'like "ch" in German "ich"'],
+      ['FN/FJ', 'bn / bv',                              ['fnykur (stench)',   'fjall (mountain)',  'fjörður (fjord)'],   'f becomes voiced b before n or j'],
+      ['NG',    'ng-g (both sounded)',                  ['ungur (young)',     'enginn (nobody)',   'langur (long)'],     'unlike English "sing" — both n and g are audible'],
+      ['NN',    'nasalised / long n',                   ['kanna (jug)',       'hann (he)',         'vinna (work)'],      'held longer than a single n'],
     ],
   },
   aspiration: {
     title: 'Pre-aspiration',
     desc: 'Icelandic double stops (pp, tt, kk) have a noticeable breath (h-sound) BEFORE the stop, not after. This is the opposite of English.',
     rows: [
-      ['pp', 'h+p — "ahp"', 'uppá (upon)',    'breathe out before the p'],
-      ['tt', 'h+t — "aht"', 'köttur (cat)',   'the double-t sounds like "ht"'],
-      ['kk', 'h+k — "ahk"', 'ekki (not)',     'breathe out before the k'],
-      ['bb', 'pre-voiced',  'sabbat',         'voiced counterpart, softer'],
+      ['pp', 'h+p — "ahp"', ['uppá (upon)',       'appelsína (orange)', 'knappur (button)'],  'breathe out before the p'],
+      ['tt', 'h+t — "aht"', ['köttur (cat)',      'nótt (night)',       'máttugur (mighty)'], 'the double-t sounds like "ht"'],
+      ['kk', 'h+k — "ahk"', ['ekki (not)',        'bekkur (bench)',     'bakki (bank)'],      'breathe out before the k'],
+      ['bb', 'pre-voiced',  ['ebba (ebb tide)',   'gabba (deceive)',    'rabbi (rabbi)'],     'voiced counterpart, softer'],
     ],
   },
   stress: {
     title: 'Stress & Rhythm',
     rows: [
-      ['Stress', 'Always on the first syllable', 'ÍS-lenska, KEN-nari, HALL-ó',  'no exceptions in native words'],
-      ['Vowel length', 'Stressed vowels are long before one consonant', 'fara (faa-ra)',  'short before two consonants: barn (b-a-rn)'],
-      ['Intonation', 'Relatively flat, falling at end of sentence', '—',  'avoid rising intonation on statements (sounds like a question)'],
+      ['Stress',       'Always on the first syllable',                   ['Ísland (Iceland)',  'kennari (teacher)', 'stúdent (student)'], 'no exceptions in native words'],
+      ['Vowel length', 'Long before one consonant, short before two',   ['fara (go)',         'barn (child)',      'vera (be)'],         'fara: long á; barn: short a before rn'],
+      ['Intonation',   'Relatively flat, falling at end of sentence',   ['takk (thanks)',     'gott (good)',       'já (yes)'],          'avoid rising intonation on statements'],
     ],
   },
 };
@@ -2468,7 +2468,7 @@ function PronunciationView(){
             <tr>
               <th>Letter / Pattern</th>
               <th>Sounds Like</th>
-              <th>Example</th>
+              <th>Examples</th>
               <th>Notes</th>
             </tr>
           </thead>
@@ -2487,8 +2487,20 @@ function PronunciationView(){
                 </td>
                 <td className="pron-sounds">{sounds}</td>
                 <td>
-                  <span className="pron-example icelandic">{example.split(' ')[0]}</span>
-                  {' '}<span className="pron-example-en">{example.split(' ').slice(1).join(' ')}</span>
+                  <div className="pron-examples">
+                    {(Array.isArray(example)?example:[example]).map((ex,j)=>{
+                      const pi=ex.indexOf(' (');
+                      const word=pi>=0?ex.slice(0,pi):ex;
+                      const trans=pi>=0?ex.slice(pi+2,-1):'';
+                      return(
+                        <div key={j} className="pron-example-row">
+                          <button className="pron-play-btn" onClick={()=>playWord(word)} title={`Hear "${word}"`}><SpeakerIcon/></button>
+                          <span className="pron-example icelandic">{word}</span>
+                          {trans&&<span className="pron-example-en">({trans})</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </td>
                 <td className="pron-note">{note}</td>
               </tr>
