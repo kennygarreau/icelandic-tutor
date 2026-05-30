@@ -37,10 +37,112 @@ const playWord=async(text)=>{
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// WELCOME MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+function WelcomeModal({data, onClose, onNavigate}){
+  const hour=new Date().getHours();
+  const isNew=data.streak===0&&data.lessons_completed===0&&data.vocab_due===0;
+  const greeting=isNew?'Halló!':hour<12?'Góðan morgun!':hour<18?'Góðan daginn!':'Gott kvöld!';
+  const fmtCat=id=>id?.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())||'';
+
+  const today=new Date();
+  const weekDots=Array.from({length:7},(_,i)=>{
+    const d=new Date(today); d.setDate(today.getDate()-6+i);
+    const iso=d.toISOString().slice(0,10);
+    const labels=['S','M','T','W','T','F','S'];
+    return{label:labels[d.getDay()],active:data.active_dates?.includes(iso),isToday:i===6};
+  });
+
+  return(
+    <div className="welcome-overlay" onClick={onClose}>
+      <div className="welcome-modal" onClick={e=>e.stopPropagation()}>
+        <button className="welcome-close" onClick={onClose}>✕</button>
+
+        <div className="welcome-header">
+          <h2 className="welcome-greeting">{greeting}</h2>
+          <div className="welcome-streak">
+            <span className="welcome-streak-flame">🔥</span>
+            <span className="welcome-streak-num">{data.streak}</span>
+            <span className="welcome-streak-label">{data.streak===1?'day streak':'day streak'}</span>
+          </div>
+        </div>
+
+        <div className="welcome-week">
+          {weekDots.map((d,i)=>(
+            <div key={i} className={`welcome-dot-col${d.isToday?' today':''}`}>
+              <div className={`welcome-dot${d.active?' active':''}`}/>
+              <span className="welcome-dot-label">{d.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {data.word_of_day&&(
+          <div className="welcome-wotd">
+            <span className="welcome-wotd-tag">Word of the Day</span>
+            <div className="welcome-wotd-row">
+              <span className="welcome-wotd-is icelandic">{data.word_of_day.word}</span>
+              <span className="welcome-wotd-en">{data.word_of_day.english}</span>
+            </div>
+            {data.word_of_day.example_is&&(
+              <p className="welcome-wotd-ex icelandic">"{data.word_of_day.example_is}"</p>
+            )}
+          </div>
+        )}
+
+        <div className="welcome-actions">
+          {(data.vocab_due>0||data.sentences_due>0)&&(
+            <button className="welcome-action" onClick={()=>onNavigate('flashcards')}>
+              <span className="welcome-action-icon">🃏</span>
+              <div className="welcome-action-body">
+                <span className="welcome-action-title">{data.vocab_due+data.sentences_due} cards due for review</span>
+                <span className="welcome-action-sub">Keep your streak going</span>
+              </div>
+              <span className="welcome-action-arrow">→</span>
+            </button>
+          )}
+          {data.next_lesson&&(
+            <button className="welcome-action" onClick={()=>onNavigate('chat','lesson',data.next_lesson.id)}>
+              <span className="welcome-action-icon">📖</span>
+              <div className="welcome-action-body">
+                <span className="welcome-action-title">{data.next_lesson.title}</span>
+                <span className="welcome-action-sub">{data.next_lesson.track} · next lesson</span>
+              </div>
+              <span className="welcome-action-arrow">→</span>
+            </button>
+          )}
+          {data.weak_category&&(
+            <button className="welcome-action" onClick={()=>onNavigate('drill')}>
+              <span className="welcome-action-icon">🎯</span>
+              <div className="welcome-action-body">
+                <span className="welcome-action-title">Drill: {fmtCat(data.weak_category)}</span>
+                <span className="welcome-action-sub">Your weakest area this month</span>
+              </div>
+              <span className="welcome-action-arrow">→</span>
+            </button>
+          )}
+        </div>
+
+        <div className="welcome-footer">
+          <div className="welcome-stats">
+            {data.cefr_level&&<span className="welcome-stat">CEFR <strong>{data.cefr_level}</strong></span>}
+            <span className="welcome-stat">{data.lessons_completed}/{data.lessons_total} lessons</span>
+          </div>
+          <button className="welcome-free-btn" onClick={()=>onNavigate('chat')}>
+            {isNew?'Start learning →':'Free chat →'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ROOT
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App(){
   const [tab,setTab]=useState('chat');
+  const [showWelcome,setShowWelcome]=useState(false);
+  const [dashData,setDashData]=useState(null);
   const TABS=[
     {id:'chat',      icon:<ChatIcon/>,  label:'Chat'},
     {id:'scenarios', icon:<SceneIcon/>, label:'Scenarios'},
@@ -54,6 +156,17 @@ export default function App(){
   ];
   const goChat=(mode,id)=>{setTab('chat'); setTimeout(()=>launchChat(mode,id),50);};
   useEffect(()=>{_goToTab=setTab;return()=>{_goToTab=null;};},[]);
+
+  useEffect(()=>{
+    const today=new Date().toISOString().slice(0,10);
+    if(localStorage.getItem('last_welcome_date')!==today){
+      fetch(`${API}/dashboard`).then(r=>r.json()).then(d=>{
+        setDashData(d);
+        setShowWelcome(true);
+        localStorage.setItem('last_welcome_date',today);
+      }).catch(()=>{});
+    }
+  },[]);
 
   useEffect(()=>{
     const nav=document.getElementById('bottom-nav');
@@ -98,6 +211,14 @@ export default function App(){
         ))}
       </nav>
 
+      {showWelcome&&dashData&&(
+        <WelcomeModal data={dashData} onClose={()=>setShowWelcome(false)}
+          onNavigate={(tabId,mode,id)=>{
+            setShowWelcome(false);
+            setTab(tabId);
+            if(mode&&id) setTimeout(()=>launchChat(mode,id),80);
+          }}/>
+      )}
     </div>
   );
 }

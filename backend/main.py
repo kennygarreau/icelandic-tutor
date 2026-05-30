@@ -1060,6 +1060,67 @@ class LessonProgressUpdate(BaseModel):
 @app.get("/health")
 def health(): return {"status":"ok","llm":LLM_PROVIDER}
 
+@app.get("/dashboard")
+def get_dashboard():
+    today = today_iso()
+    week_start = (datetime.now(timezone.utc).date() - timedelta(days=6)).isoformat()
+    with get_db() as db:
+        # ── Streak ───────────────────────────────────────────────────────────
+        all_dates = [r["date"] for r in db.execute(
+            "SELECT DISTINCT date FROM progress ORDER BY date DESC LIMIT 365"
+        ).fetchall()]
+        streak = 0
+        yesterday = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+        if all_dates and all_dates[0] in (today, yesterday):
+            expected = all_dates[0]
+            for d in all_dates:
+                if d == expected:
+                    streak += 1
+                    expected = (datetime.fromisoformat(expected).date() - timedelta(days=1)).isoformat()
+                else:
+                    break
+        active_dates = [r["date"] for r in db.execute(
+            "SELECT DISTINCT date FROM progress WHERE date >= ?", (week_start,)
+        ).fetchall()]
+        # ── Cards ─────────────────────────────────────────────────────────────
+        vocab_due = db.execute(
+            "SELECT COUNT(*) as n FROM flashcards WHERE due_date <= date('now') AND category NOT IN ('phrase','sentence')"
+        ).fetchone()["n"]
+        sent_due = db.execute(
+            "SELECT COUNT(*) as n FROM flashcards WHERE due_date <= date('now') AND category IN ('phrase','sentence')"
+        ).fetchone()["n"]
+        # ── Lessons ───────────────────────────────────────────────────────────
+        completed_ids = {r["lesson_id"] for r in db.execute(
+            "SELECT DISTINCT lesson_id FROM lesson_progress WHERE completed=1"
+        ).fetchall()}
+        # ── CEFR ──────────────────────────────────────────────────────────────
+        cefr_row = db.execute(
+            "SELECT level FROM cefr_assessments ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        # ── Weakest category (chat errors, last 30 days) ──────────────────────
+        weak_row = db.execute(
+            "SELECT grammar_category, COUNT(*) as count FROM error_log "
+            "WHERE date >= date('now','-30 days') AND error_type != 'drill' "
+            "GROUP BY grammar_category ORDER BY count DESC LIMIT 1"
+        ).fetchone()
+        # ── Word of the Day ───────────────────────────────────────────────────
+        wotd = db.execute("SELECT * FROM word_of_day WHERE date=?", (today,)).fetchone()
+
+    next_lesson = next((l for l in LESSONS if l["id"] not in completed_ids), None)
+
+    return {
+        "streak": streak,
+        "active_dates": active_dates,
+        "vocab_due": vocab_due,
+        "sentences_due": sent_due,
+        "lessons_completed": len(completed_ids),
+        "lessons_total": len(LESSONS),
+        "next_lesson": {"id": next_lesson["id"], "title": next_lesson["title"], "track": next_lesson["track"]} if next_lesson else None,
+        "cefr_level": cefr_row["level"] if cefr_row else None,
+        "weak_category": weak_row["grammar_category"] if weak_row else None,
+        "word_of_day": dict(wotd) if wotd else None,
+    }
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # CHAT
 # ═══════════════════════════════════════════════════════════════════════════════
