@@ -1815,14 +1815,14 @@ const CEFR_COLORS = {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const DRILL_CATEGORIES = [
-  {id:'case_nominative',   label:'Nominative'},
-  {id:'case_accusative',   label:'Accusative'},
-  {id:'case_dative',       label:'Dative'},
-  {id:'case_genitive',     label:'Genitive'},
-  {id:'verb_conjugation',  label:'Conjugation'},
-  {id:'verb_tense',        label:'Verb Tense'},
-  {id:'noun_gender',       label:'Noun Gender'},
-  {id:'adjective_agreement',label:'Adjectives'},
+  {id:'case_nominative',    label:'Nominative',  desc:'The subject of a sentence — the one doing the action. e.g. Hundurinn bítur (The dog bites) — hundurinn is nominative.'},
+  {id:'case_accusative',    label:'Accusative',  desc:'The direct object — the one receiving the action. e.g. Ég sé hundinn (I see the dog) — hundinn is accusative.'},
+  {id:'case_dative',        label:'Dative',      desc:'Indirect objects and many prepositions (í, á, með, frá, hjá). e.g. Ég gef hundinum mat (I give the dog food) — hundinum is dative.'},
+  {id:'case_genitive',      label:'Genitive',    desc:'Possession or "of" relationships. e.g. Bíll Jóns (Jón\'s car) — Jóns is genitive.'},
+  {id:'verb_conjugation',   label:'Conjugation', desc:'Matching verb endings to subject pronoun in present tense. e.g. ég tala, þú talar, hann talar, við tölum.'},
+  {id:'verb_tense',         label:'Verb Tense',  desc:'Converting present tense to simple past (þátíð). Weak verbs add -ði/-ti; strong verbs change the stem vowel. e.g. tala → talaði, fara → fór.'},
+  {id:'noun_gender',        label:'Noun Gender', desc:'Every Icelandic noun is masculine, feminine, or neuter — this determines all case endings and adjective agreement. e.g. hestur (m.), kona (f.), barn (n.).'},
+  {id:'adjective_agreement',label:'Adjectives',  desc:'Adjective endings must match the noun\'s gender, case, and definiteness. e.g. stór hestur (big horse, m. nom.) vs. stórt barn (big child, n. nom.).'},
 ];
 
 function DrillView(){
@@ -1927,6 +1927,7 @@ function DrillView(){
                 className={`pill ${category===c.id?'active':''}`}
                 onClick={()=>setCategory(c.id)}
                 disabled={phase==='loading'}
+                title={c.desc}
               >{c.label}</button>
             ))}
           </div>
