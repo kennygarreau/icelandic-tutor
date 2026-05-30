@@ -22,6 +22,11 @@ function launchChat(mode,id){_launchChat?.(mode,id);}
 let _goToTab = null;
 function goToTab(id){_goToTab?.(id);}
 
+let _sessionsCache = null;
+let _sessionsCacheTs = 0;
+const SESSIONS_CACHE_TTL = 30_000;
+function invalidateSessionsCache(){ _sessionsCache = null; _sessionsCacheTs = 0; }
+
 const playWord=async(text)=>{
   try{
     const r=await fetch(`${TTS}/synthesize`,{method:'POST',
@@ -284,9 +289,18 @@ function ChatView(){
   // Always-current snapshot — sendMessage reads from here so it needs zero deps
   stateRef.current={messages,level,autoPlay,sessionId,chatMode,speakText};
 
-  const loadPastSessions = async (limit=30) => {
+  const loadPastSessions = async (limit=30, force=false) => {
+    const now = Date.now();
+    if (!force && _sessionsCache && now - _sessionsCacheTs < SESSIONS_CACHE_TTL) {
+      setPastSessions(_sessionsCache);
+      return;
+    }
     setSessionsLoading(true);
-    try{ const d=await fetch(`${API}/sessions?limit=${limit}`).then(r=>r.json()); setPastSessions(d); }
+    try{
+      const d=await fetch(`${API}/sessions?limit=${limit}`).then(r=>r.json());
+      _sessionsCache=d; _sessionsCacheTs=Date.now();
+      setPastSessions(d);
+    }
     catch(e){ console.error(e); }
     finally{ setSessionsLoading(false); }
   };
@@ -337,6 +351,7 @@ function ChatView(){
     e.stopPropagation();
     try{
       await fetch(`${API}/sessions/${sid}`,{method:'DELETE'});
+      invalidateSessionsCache();
       setPastSessions(prev=>prev.filter(s=>s.id!==sid));
       if(stateRef.current.sessionId===sid) newSession();
     }catch(e){ console.error(e); }
@@ -483,6 +498,7 @@ function ChatView(){
             _span.setStatus({code:SpanStatusCode.OK});
             if(!sessionId) setSessionId(evt.session_id);
             if(isNewSession && evt.session_id){
+              invalidateSessionsCache();
               fetch(`${API}/sessions/${evt.session_id}/generate-title`,{method:'POST'})
                 .then(r=>r.json())
                 .then(d=>{
@@ -1115,11 +1131,9 @@ function HeatmapView(){
   const [loading,setLoading]=useState(true);
   const [subtab,setSubtab]=useState('mistakes');
   useEffect(()=>{
-    Promise.all([
-      fetch(`${API}/heatmap`).then(r=>r.json()),
-      fetch(`${API}/heatmap/analysis`).then(r=>r.json()),
-      fetch(`${API}/heatmap/strengths`).then(r=>r.json()),
-    ]).then(([h,a,s])=>{setData(h);setAnalysis(a);setStrengths(s);setLoading(false);});
+    fetch(`${API}/heatmap/full`)
+      .then(r=>r.json())
+      .then(({heatmap,analysis,strengths})=>{setData(heatmap);setAnalysis(analysis);setStrengths(strengths);setLoading(false);});
   },[]);
   if(loading)return<div className="page-layout"><div className="empty-state">Analysing your progress…</div></div>;
   const maxCount=data?Math.max(...Object.values(data.error_map||{}).map(c=>c.count||0),1):1;
@@ -1466,10 +1480,11 @@ function FlashcardsView(){
     // Remove the reviewed card from dueCards immediately so the badge reflects reality
     setDueCards(prev=>{
       const next=prev.filter(c=>c.id!==cardId);
+      const sectionNext=isSentSec?next.filter(c=>SENTENCE_CATS.includes(c.category)):next.filter(c=>!SENTENCE_CATS.includes(c.category));
       setTimeout(()=>{
         setShowAns(false);setRevResult(null);setFcPronScore(null);
-        if(next.length===0){loadCards();setReviewIdx(0);setMode('browse');}
-        else setReviewIdx(i=>Math.min(i,next.length-1));
+        if(sectionNext.length===0){loadCards();setReviewIdx(0);setMode('browse');}
+        else setReviewIdx(i=>Math.min(i,sectionNext.length-1));
       },700);
       return next;
     });

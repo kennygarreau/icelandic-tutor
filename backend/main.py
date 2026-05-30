@@ -69,6 +69,7 @@ os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 def get_db():
     c = sqlite3.connect(DB_PATH, check_same_thread=False)
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA journal_mode=WAL")
     return c
 
 def init_db():
@@ -198,6 +199,12 @@ def init_db():
             )
         """)
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_flashcards_icelandic ON flashcards(lower(trim(icelandic)))")
+        c.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_error_log_date_cat ON error_log(date, grammar_category);
+            CREATE INDEX IF NOT EXISTS idx_sessions_updated_at ON sessions(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_progress_date ON progress(date);
+        """)
         c.commit()
     logger.info("DB ready.")
 
@@ -1672,6 +1679,14 @@ async def get_heatmap_analysis(days:int=90):
         raise HTTPException(502,f"LLM error: {e}")
     return parse_json(raw)
 
+@app.get("/heatmap/full")
+async def get_heatmap_full(days:int=90):
+    """Combined endpoint: returns heatmap + strengths + analysis in one round-trip."""
+    heatmap   = get_heatmap(days)
+    strengths = get_heatmap_strengths(days)
+    analysis  = await get_heatmap_analysis(days)
+    return {"heatmap": heatmap, "strengths": strengths, "analysis": analysis}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # PRONUNCIATION — proxy to pronunciation service
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2422,6 +2437,10 @@ async def get_drill_questions(category: str = "case_accusative", level: str = "b
         ts, questions = _drill_cache[cache_key]
         if now - ts < _DRILL_CACHE_TTL:
             return {"questions": questions, "category": category, "level": level, "cached": True}
+    # Evict all expired entries before inserting a new one
+    expired = [k for k, (ts, _) in _drill_cache.items() if now - ts >= _DRILL_CACHE_TTL]
+    for k in expired:
+        del _drill_cache[k]
     prompt = DRILL_GEN_PROMPT.format(count=count, category=category, level=level)
     try:
         raw = await call_llm([{"role":"user","content":"Generate the drill questions now."}], prompt, max_tokens=2000)
