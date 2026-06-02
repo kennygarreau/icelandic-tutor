@@ -235,6 +235,22 @@ input,textarea{font-family:inherit;color:inherit}
 .pron-tip-box{display:flex;align-items:flex-start;gap:.7rem;margin-top:1.2rem;padding:.8rem 1rem;border-radius:var(--r);background:rgba(61,232,160,.05);border:1px solid rgba(61,232,160,.2)}
 .pron-tip-icon{color:var(--aurora-g);font-size:1rem;flex-shrink:0;margin-top:.1rem}
 .pron-tip-text{font-size:.85rem;color:var(--muted);line-height:1.55}
+/* Pronoun case table */
+.pronoun-table th{white-space:normal;text-align:center}
+.pronoun-table td{text-align:center}
+.pronoun-table td:first-child{text-align:left}
+.case-hint{display:block;font-family:inherit;font-size:.62rem;letter-spacing:.03em;text-transform:none;color:rgba(122,138,170,.7);margin-top:.15rem}
+.pron-case-cell{display:inline-flex;align-items:center;gap:.3rem}
+/* Word sections (prepositions, conjunctions, adverbs) */
+.pron-word-cell{display:inline-flex;align-items:center;gap:.35rem}
+.type-tag{display:inline-block;padding:.1rem .45rem;border-radius:20px;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.type-tag-time{background:rgba(56,178,232,.12);color:var(--aurora-b);border:1px solid rgba(56,178,232,.25)}
+.type-tag-frequency{background:rgba(155,127,232,.12);color:var(--aurora-p);border:1px solid rgba(155,127,232,.25)}
+.type-tag-place{background:rgba(61,232,160,.12);color:var(--aurora-g);border:1px solid rgba(61,232,160,.25)}
+.type-tag-manner{background:rgba(201,168,76,.12);color:var(--gold);border:1px solid rgba(201,168,76,.25)}
+.type-tag-—{color:var(--muted);font-size:.8rem;font-weight:400;letter-spacing:0;text-transform:none;background:none;border:none;padding:0}
+.type-tag-genitive,.type-tag-dative,.type-tag-accusative{background:rgba(201,168,76,.1);color:var(--gold);border:1px solid rgba(201,168,76,.2)}
+.type-tag-acc,.type-tag-also{background:rgba(201,168,76,.1);color:var(--gold);border:1px solid rgba(201,168,76,.2)}
 
 /* ── Heatmap ── */
 .hm-section{display:flex;flex-direction:column;gap:.7rem}
@@ -498,6 +514,56 @@ input,textarea{font-family:inherit;color:inherit}
 .rag-source-link{font-size:.75rem;color:var(--muted);background:none;cursor:pointer;border:1px solid var(--border);border-radius:4px;padding:.15rem .45rem;transition:background .15s,color .15s}
 .rag-source-link:hover{background:var(--surface2,#2a2a2a);color:var(--fg)}
 /* ── PDF modal ───────────────────────────────────────────────────────────── */
+/* Library */
+.lib-search-bar{display:flex;gap:.5rem}
+.lib-search-input{flex:1;background:var(--raised);border:1px solid var(--border);border-radius:var(--r);padding:.55rem .85rem;font-size:.95rem;outline:none;transition:border-color var(--tr)}
+.lib-search-input:focus{border-color:rgba(168,200,232,.45)}.lib-search-input::placeholder{color:var(--muted);font-style:italic}
+.lib-search-btn{padding:.55rem 1.2rem;border-radius:var(--r);background:rgba(168,200,232,.12);border:1px solid rgba(168,200,232,.3);color:var(--ice-bright);font-family:'Cinzel',serif;font-size:.8rem;letter-spacing:.04em;transition:all var(--tr);white-space:nowrap}
+.lib-search-btn:hover:not(:disabled){background:rgba(168,200,232,.2)}.lib-search-btn:disabled{opacity:.4;cursor:not-allowed}
+.lib-books-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem}
+.lib-book-card{border:1px solid var(--border);border-radius:var(--r);background:var(--raised);overflow:hidden;cursor:pointer;transition:all var(--tr);display:flex;flex-direction:column}
+.lib-book-card:hover{border-color:var(--ice);transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,.4)}
+.lib-book-cover{aspect-ratio:3/4;overflow:hidden;background:var(--surface);flex-shrink:0}
+.lib-book-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.lib-book-meta{padding:.75rem .85rem;display:flex;flex-direction:column;gap:.3rem}
+.lib-book-title{font-size:.9rem;font-weight:600;color:var(--ice-bright)}
+.lib-book-pages{font-size:.75rem;color:var(--muted)}
+.lib-book-progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.lib-book-progress-fill{height:100%;background:var(--aurora-g);border-radius:2px;transition:width .4s ease}
+.lib-book-pct{font-size:.72rem;color:var(--muted)}
+.lib-back-btn{font-size:.82rem;color:var(--muted);padding:.25rem .5rem;border-radius:6px;transition:color var(--tr);white-space:nowrap}
+.lib-back-btn:hover{color:var(--ice-bright)}
+.lib-results{display:flex;flex-direction:column;gap:.7rem}
+.lib-result{padding:.9rem 1rem;border-radius:var(--r);border:1px solid var(--border);background:var(--raised);display:flex;flex-direction:column;gap:.5rem}
+.lib-result-header{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.lib-result-source{font-family:'Cinzel',serif;font-size:.75rem;color:var(--gold);letter-spacing:.04em}
+.lib-result-page{font-size:.75rem;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:.1rem .4rem}
+.lib-result-score{font-size:.72rem;color:var(--aurora-g);margin-left:auto}
+.lib-result-text{font-size:.88rem;color:var(--text);opacity:.85;line-height:1.5}
+.lib-result-open{align-self:flex-start;font-size:.8rem;color:var(--aurora-b);padding:.2rem .5rem;border:1px solid rgba(56,178,232,.3);border-radius:6px;transition:all var(--tr)}
+.lib-result-open:hover{background:rgba(56,178,232,.08)}
+.lib-reader-topbar{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;flex-shrink:0}
+.lib-reader-title{flex:1;display:flex;flex-direction:column;gap:.1rem;min-width:0}
+.lib-reader-book-name{font-family:'Cinzel',serif;font-size:.9rem;font-weight:600;color:var(--ice-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lib-reader-progress{font-size:.72rem;color:var(--muted)}
+.lib-complete-btn{padding:.4rem .9rem;border-radius:20px;border:1px solid var(--border);color:var(--muted);font-size:.8rem;transition:all var(--tr);white-space:nowrap}
+.lib-complete-btn:hover{border-color:var(--aurora-g);color:var(--aurora-g)}
+.lib-complete-btn.done{background:rgba(61,232,160,.1);border-color:var(--aurora-g);color:var(--aurora-g)}
+.lib-reader-progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0}
+.lib-reader-progress-fill{height:100%;background:var(--aurora-g);transition:width .4s ease}
+.lib-page-wrap{position:relative;display:flex;justify-content:center;align-items:flex-start;flex:1;min-height:300px}
+.lib-page-skeleton{width:100%;max-width:700px;aspect-ratio:3/4;background:var(--raised);border-radius:6px;animation:pulse-bg 1.5s ease-in-out infinite}
+@keyframes pulse-bg{0%,100%{opacity:.5}50%{opacity:1}}
+.lib-page-img{max-width:700px;width:100%;height:auto;display:block;border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.5)}
+.lib-page-done-badge{position:absolute;top:.6rem;right:.6rem;background:rgba(61,232,160,.85);color:var(--void);border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:.9rem;font-weight:700}
+.lib-nav-row{display:flex;align-items:center;justify-content:center;gap:.8rem;flex-shrink:0}
+.lib-nav-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--border);color:var(--muted);font-size:1.1rem;display:flex;align-items:center;justify-content:center;transition:all var(--tr)}
+.lib-nav-btn:hover:not(:disabled){border-color:var(--ice);color:var(--ice-bright)}.lib-nav-btn:disabled{opacity:.3;cursor:not-allowed}
+.lib-page-input-wrap{display:flex;align-items:center;gap:.4rem}
+.lib-page-input{width:56px;text-align:center;background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:.35rem .4rem;font-size:.9rem;color:var(--text);outline:none}
+.lib-page-input:focus{border-color:rgba(168,200,232,.4)}
+.lib-page-total{font-size:.85rem;color:var(--muted)}
+
 /* Welcome modal */
 .welcome-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;display:flex;align-items:center;justify-content:center;padding:1.2rem;backdrop-filter:blur(4px)}
 .welcome-modal{position:relative;width:min(460px,100%);background:var(--deep);border:1px solid var(--border);border-radius:16px;padding:1.6rem;display:flex;flex-direction:column;gap:1.1rem;box-shadow:0 32px 80px rgba(0,0,0,.7)}

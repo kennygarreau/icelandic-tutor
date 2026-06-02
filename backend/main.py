@@ -158,6 +158,13 @@ def init_db():
             overall_score INTEGER, word_scores TEXT,
             phoneme_tips TEXT
         );
+        CREATE TABLE IF NOT EXISTS reading_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL,
+            page_num INTEGER NOT NULL,
+            completed_at TEXT NOT NULL,
+            UNIQUE(filename, page_num)
+        );
         CREATE TABLE IF NOT EXISTS grammar_drill_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
@@ -1264,7 +1271,7 @@ When this material is relevant, naturally reference it in your tip or correction
         tts_sent         = False   # tts_ready event already yielded
         MARKER           = '"icelandic": "'
 
-        model_name = OLLAMA_MODEL if LLM_PROVIDER == "ollama" else ANTHROPIC_MODEL
+        model_name = OLLAMA_MODEL if LLM_PROVIDER == "ollama" else LITELLM_MODEL if LLM_PROVIDER == "litellm" else ANTHROPIC_MODEL
         t_llm  = time.monotonic()
         first  = True
 
@@ -2142,13 +2149,6 @@ async def get_cefr_estimate(force_refresh: bool = False):
             SELECT grammar_category, COUNT(*) as count
             FROM error_log GROUP BY grammar_category ORDER BY count DESC
         """).fetchall()
-        lesson_stats = db.execute("""
-            SELECT COUNT(DISTINCT lesson_id) as completed,
-                   (SELECT COUNT(*) FROM (SELECT DISTINCT id FROM (
-                       SELECT 'x' as id FROM lesson_progress
-                   ))) as total
-            FROM lesson_progress WHERE completed=1
-        """).fetchone()
         lessons_done = db.execute("""
             SELECT l.lesson_id, l.completed_at
             FROM lesson_progress l WHERE l.completed=1
@@ -2349,6 +2349,40 @@ async def submit_exam(exam_id: int, submission: ExamSubmission):
         db.commit()
 
     return {"exam_id": exam_id, "result": result}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LIBRARY / READING PROGRESS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class ReadingProgressReq(BaseModel):
+    filename: str
+    page_num: int
+    completed: bool
+
+@app.post("/library/progress")
+def set_reading_progress(req: ReadingProgressReq):
+    with get_db() as db:
+        if req.completed:
+            db.execute(
+                "INSERT OR IGNORE INTO reading_progress(filename, page_num, completed_at) VALUES(?,?,?)",
+                (req.filename, req.page_num, now_iso())
+            )
+        else:
+            db.execute(
+                "DELETE FROM reading_progress WHERE filename=? AND page_num=?",
+                (req.filename, req.page_num)
+            )
+        db.commit()
+    return {"filename": req.filename, "page_num": req.page_num, "completed": req.completed}
+
+@app.get("/library/progress/{filename}")
+def get_reading_progress(filename: str):
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT page_num FROM reading_progress WHERE filename=? ORDER BY page_num",
+            (filename,)
+        ).fetchall()
+    return {"filename": filename, "completed_pages": [r["page_num"] for r in rows]}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GRAMMAR DRILL

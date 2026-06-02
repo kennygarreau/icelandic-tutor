@@ -154,6 +154,7 @@ export default function App(){
     {id:'lessons',   icon:<BookIcon/>,  label:'Lessons'},
     {id:'drill',     icon:<DrillIcon/>, label:'Drill'},
     {id:'flashcards',   icon:<CardIcon/>,   label:'Cards'},
+    {id:'library',      icon:<LibraryIcon/>,label:'Library'},
     {id:'pronunciation',icon:<PronIcon/>,  label:'Pronunciation'},
     {id:'heatmap',      icon:<FireIcon/>,  label:'Heatmap'},
     {id:'progress',  icon:<ChartIcon/>, label:'Progress'},
@@ -206,6 +207,7 @@ export default function App(){
         {tab==='heatmap'    && <HeatmapView/>}
         {tab==='progress'   && <ProgressView/>}
         {tab==='flashcards' && <FlashcardsView/>}
+        {tab==='library'    && <LibraryView/>}
         {tab==='cefr'       && <CefrView/>}
       </main>
       <nav className="bottom-nav" id="bottom-nav" style={{display:'none'}}>
@@ -1575,33 +1577,39 @@ function FlashcardsView(){
       <div className="page-header">
         <h2 className="page-title">Flashcards</h2>
         <div className="fc-header-actions">
-          <span className="badge">{sectionDueCards.length} due</span>
-          <span className="badge badge-muted">{sectionCards.length} total</span>
-          <div className="level-pills">
+          {section!=='reference'&&<span className="badge">{sectionDueCards.length} due</span>}
+          {section!=='reference'&&<span className="badge badge-muted">{sectionCards.length} total</span>}
+          {section!=='reference'&&<div className="level-pills">
             {(isSentSec?['browse','review','add','generate']:['browse','review','quiz','add','generate']).map(m=>(
               <button key={m} className={`pill ${mode===m?'active':''}`} onClick={()=>{setMode(m);setReviewIdx(0);setShowAns(false);if(m==='quiz')setQuizState('start');}}>
                 {m.charAt(0).toUpperCase()+m.slice(1)}
                 {m==='review'&&sectionDueCards.length>0&&<span className="pill-badge">{sectionDueCards.length}</span>}
               </button>
             ))}
-          </div>
+          </div>}
         </div>
       </div>
 
       <div className="fc-section-tabs">
-        <button className={`fc-section-tab ${!isSentSec?'active':''}`}
+        <button className={`fc-section-tab ${section==='vocabulary'?'active':''}`}
           onClick={()=>{setSection('vocabulary');setMode('browse');setReviewIdx(0);setShowAns(false);setFilter('all');setPosFilter('all');setNewCat('vocabulary');}}>
           Vocabulary
           <span className="fc-sec-count">{cards.filter(c=>!SENTENCE_CATS.includes(c.category)).length}</span>
         </button>
-        <button className={`fc-section-tab ${isSentSec?'active':''}`}
+        <button className={`fc-section-tab ${section==='sentences'?'active':''}`}
           onClick={()=>{setSection('sentences');setMode('browse');setReviewIdx(0);setShowAns(false);setFilter('all');setNewCat('sentence');}}>
           Sentences
           <span className="fc-sec-count">{cards.filter(c=>SENTENCE_CATS.includes(c.category)).length}</span>
         </button>
+        <button className={`fc-section-tab ${section==='reference'?'active':''}`}
+          onClick={()=>setSection('reference')}>
+          Reference
+        </button>
       </div>
 
-      {mode==='review'&&(
+      {section==='reference' && <GrammarReferenceView/>}
+
+      {section!=='reference' && mode==='review'&&(
         <div className="review-area">
           {sectionDueCards.length===0?(
             <div className="review-done">
@@ -1684,7 +1692,7 @@ function FlashcardsView(){
         </div>
       )}
 
-      {mode==='quiz'&&(
+      {section!=='reference' && mode==='quiz'&&(
         <div className="quiz-area">
           {quizState==='start'&&(
             <div className="quiz-start">
@@ -1747,7 +1755,7 @@ function FlashcardsView(){
             const pct=Math.round((score/quizLog.length)*100);
             return(
               <div className="quiz-results">
-                <div className="quiz-score-circle" style={{'--pct':pct}}>
+                <div className="quiz-score-circle">
                   <span className="quiz-score-num">{pct}%</span>
                   <span className="quiz-score-sub">{score}/{quizLog.length}</span>
                 </div>
@@ -1773,7 +1781,7 @@ function FlashcardsView(){
         </div>
       )}
 
-      {mode==='add'&&(
+      {section!=='reference' && mode==='add'&&(
         <form className="add-card-form" onSubmit={handleAdd}>
           <h3 className="form-title">Add a {isSentSec?'sentence':'flashcard'}</h3>
           <div className="form-group"><label>{isSentSec?'Icelandic sentence':'Icelandic'}</label><input value={newIs} onChange={e=>setNewIs(e.target.value)} placeholder={isSentSec?'e.g. Hvernig hefur þú það í dag?':'e.g. Góðan daginn'} required/></div>
@@ -1796,7 +1804,7 @@ function FlashcardsView(){
         </form>
       )}
 
-      {mode==='generate'&&(
+      {section!=='reference' && mode==='generate'&&(
         <div className="add-card-form">
           <h3 className="form-title">Generate {isSentSec?'sentences':'cards'} with AI</h3>
           <div className="form-group"><label>{isSentSec?'Situation / topic':'Topic'}</label>
@@ -1814,7 +1822,7 @@ function FlashcardsView(){
         </div>
       )}
 
-      {mode==='browse'&&(
+      {section!=='reference' && mode==='browse'&&(
         <>
           {!isSentSec&&(
             <>
@@ -2176,6 +2184,224 @@ function DrillView(){
       )}
     </div>
   );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIBRARY VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+function LibraryView(){
+  const [mode,setMode]               = useState('books'); // books | reader | search
+  const [books,setBooks]             = useState([]);
+  const [booksLoading,setBooksLoading] = useState(true);
+  const [activeBook,setActiveBook]   = useState(null);
+  const [currentPage,setCurrentPage] = useState(1);
+  const [completedPages,setCompletedPages] = useState(new Set());
+  const [pageInput,setPageInput]     = useState('1');
+  const [imgLoading,setImgLoading]   = useState(true);
+  const [searchQuery,setSearchQuery] = useState('');
+  const [searchResults,setSearchResults] = useState([]);
+  const [searching,setSearching]     = useState(false);
+  const [searchDone,setSearchDone]   = useState(false);
+
+  useEffect(()=>{
+    fetch('/rag/books').then(r=>r.json())
+      .then(d=>{ setBooks(d.books||[]); setBooksLoading(false); })
+      .catch(()=>setBooksLoading(false));
+  },[]);
+
+  // Keyboard navigation in reader
+  useEffect(()=>{
+    if(mode!=='reader'||!activeBook) return;
+    const handler=(e)=>{
+      if(e.key==='ArrowLeft')  goToPage(currentPage-1);
+      if(e.key==='ArrowRight') goToPage(currentPage+1);
+    };
+    window.addEventListener('keydown',handler);
+    return()=>window.removeEventListener('keydown',handler);
+  },[mode,activeBook,currentPage]);
+
+  const openBook = async(book)=>{
+    setActiveBook(book); setCurrentPage(1); setPageInput('1');
+    setImgLoading(true); setMode('reader');
+    try{
+      const d=await fetch(`${API}/library/progress/${book.filename}`).then(r=>r.json());
+      setCompletedPages(new Set(d.completed_pages));
+    }catch(e){ setCompletedPages(new Set()); }
+  };
+
+  const goToPage=(n)=>{
+    if(!activeBook) return;
+    const p=Math.max(1,Math.min(activeBook.page_count,n));
+    setCurrentPage(p); setPageInput(String(p)); setImgLoading(true);
+  };
+
+  const toggleComplete=async()=>{
+    if(!activeBook) return;
+    const done=completedPages.has(currentPage);
+    await fetch(`${API}/library/progress`,{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filename:activeBook.filename,page_num:currentPage,completed:!done})});
+    setCompletedPages(prev=>{ const n=new Set(prev); done?n.delete(currentPage):n.add(currentPage); return n; });
+  };
+
+  const doSearch=async(e)=>{
+    if(e) e.preventDefault();
+    if(!searchQuery.trim()) return;
+    setSearching(true); setSearchDone(false);
+    try{
+      const d=await fetch('/rag/query',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query:searchQuery,top_k:8})}).then(r=>r.json());
+      setSearchResults(d.chunks||[]); setMode('search'); setSearchDone(true);
+    }catch(e){ console.error(e); }
+    setSearching(false);
+  };
+
+  const openResult=(chunk)=>{
+    const book=books.find(b=>b.source===chunk.source);
+    if(!book||!chunk.page_number) return;
+    setActiveBook(book); setCurrentPage(chunk.page_number);
+    setPageInput(String(chunk.page_number)); setImgLoading(true); setMode('reader');
+    fetch(`${API}/library/progress/${book.filename}`).then(r=>r.json())
+      .then(d=>setCompletedPages(new Set(d.completed_pages))).catch(()=>{});
+  };
+
+  const bookTitle={
+    'complete_icelandic':'Complete Icelandic',
+    'colloquial-icelandic-the-complete-course-for-beginners':'Colloquial Icelandic',
+  };
+
+  // ── Books grid ──────────────────────────────────────────────────────────────
+  if(mode==='books') return(
+    <div className="page-layout">
+      <div className="page-header">
+        <div><h2 className="page-title">Library</h2><p className="page-sub">Browse your Icelandic textbooks and track reading progress</p></div>
+      </div>
+      <form className="lib-search-bar" onSubmit={doSearch}>
+        <input className="lib-search-input" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+          placeholder="Find content about… e.g. ordering at a café, verb conjugation, greetings"/>
+        <button className="lib-search-btn" type="submit" disabled={searching||!searchQuery.trim()}>
+          {searching?'Searching…':'Search'}
+        </button>
+      </form>
+      {booksLoading&&<div className="empty-state">Loading books…</div>}
+      {!booksLoading&&books.length===0&&<div className="empty-state">No PDFs found. Add books to the rag-service/pdfs directory.</div>}
+      <div className="lib-books-grid">
+        {books.map(b=>{
+          const pagesRead=b._completedCount||0;
+          const pct=b.page_count>0?Math.round((pagesRead/b.page_count)*100):0;
+          return(
+            <div key={b.filename} className="lib-book-card" onClick={()=>openBook(b)}>
+              <div className="lib-book-cover">
+                <img src={`/rag/pdfs/${b.filename}/page/1`} alt={b.title} loading="lazy"/>
+              </div>
+              <div className="lib-book-meta">
+                <p className="lib-book-title">{b.title}</p>
+                <p className="lib-book-pages">{b.page_count} pages</p>
+                <div className="lib-book-progress-bar">
+                  <div className="lib-book-progress-fill" style={{width:`${pct}%`}}/>
+                </div>
+                <p className="lib-book-pct">{pagesRead} / {b.page_count} pages read</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  // ── Search results ──────────────────────────────────────────────────────────
+  if(mode==='search') return(
+    <div className="page-layout">
+      <div className="page-header">
+        <button className="lib-back-btn" onClick={()=>setMode('books')}>← Library</button>
+        <div><h2 className="page-title">Search Results</h2></div>
+      </div>
+      <form className="lib-search-bar" onSubmit={doSearch}>
+        <input className="lib-search-input" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+          placeholder="Search the books…"/>
+        <button className="lib-search-btn" type="submit" disabled={searching||!searchQuery.trim()}>
+          {searching?'Searching…':'Search'}
+        </button>
+      </form>
+      {searchDone&&searchResults.length===0&&<div className="empty-state">No results found.</div>}
+      <div className="lib-results">
+        {searchResults.map((r,i)=>(
+          <div key={i} className="lib-result">
+            <div className="lib-result-header">
+              <span className="lib-result-source">{bookTitle[r.source]||r.source}</span>
+              {r.page_number&&<span className="lib-result-page">p. {r.page_number}</span>}
+              <span className="lib-result-score">{Math.round(r.relevance*100)}% match</span>
+            </div>
+            <p className="lib-result-text">{r.text.slice(0,280)}{r.text.length>280?'…':''}</p>
+            {r.page_number&&books.find(b=>b.source===r.source)&&(
+              <button className="lib-result-open" onClick={()=>openResult(r)}>Open page {r.page_number} →</button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── Reader ──────────────────────────────────────────────────────────────────
+  if(mode==='reader'&&activeBook){
+    const isDone=completedPages.has(currentPage);
+    const pct=activeBook.page_count>0?Math.round((completedPages.size/activeBook.page_count)*100):0;
+    return(
+      <div className="page-layout">
+        <div className="lib-reader-topbar">
+          <button className="lib-back-btn" onClick={()=>setMode('books')}>← Library</button>
+          <div className="lib-reader-title">
+            <span className="lib-reader-book-name">{activeBook.title}</span>
+            <span className="lib-reader-progress">{completedPages.size}/{activeBook.page_count} pages · {pct}%</span>
+          </div>
+          <button className={`lib-complete-btn${isDone?' done':''}`} onClick={toggleComplete}>
+            {isDone?'✓ Complete':'Mark complete'}
+          </button>
+        </div>
+
+        <div className="lib-reader-progress-bar">
+          <div className="lib-reader-progress-fill" style={{width:`${pct}%`}}/>
+        </div>
+
+        <div className="lib-page-wrap">
+          {imgLoading&&<div className="lib-page-skeleton"/>}
+          <img
+            key={`${activeBook.filename}-${currentPage}`}
+            className="lib-page-img" style={{display:imgLoading?'none':'block'}}
+            src={`/rag/pdfs/${activeBook.filename}/page/${currentPage}`}
+            alt={`Page ${currentPage}`}
+            onLoad={()=>setImgLoading(false)}
+            onError={()=>setImgLoading(false)}
+          />
+          {isDone&&!imgLoading&&<div className="lib-page-done-badge">✓</div>}
+        </div>
+
+        <div className="lib-nav-row">
+          <button className="lib-nav-btn" onClick={()=>goToPage(currentPage-1)} disabled={currentPage<=1}>←</button>
+          <div className="lib-page-input-wrap">
+            <input className="lib-page-input" type="number" min="1" max={activeBook.page_count}
+              value={pageInput}
+              onChange={e=>setPageInput(e.target.value)}
+              onBlur={()=>goToPage(parseInt(pageInput)||1)}
+              onKeyDown={e=>e.key==='Enter'&&goToPage(parseInt(pageInput)||1)}/>
+            <span className="lib-page-total">/ {activeBook.page_count}</span>
+          </div>
+          <button className="lib-nav-btn" onClick={()=>goToPage(currentPage+1)} disabled={currentPage>=activeBook.page_count}>→</button>
+        </div>
+
+        <form className="lib-search-bar" onSubmit={doSearch}>
+          <input className="lib-search-input" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+            placeholder="Search both books for a topic…"/>
+          <button className="lib-search-btn" type="submit" disabled={searching||!searchQuery.trim()}>
+            {searching?'…':'Search'}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 const CEFR_LABELS = {
@@ -2582,6 +2808,77 @@ const PRON_DATA = {
   },
 };
 
+const GRAMMAR_REF_DATA = {
+  pronouns: {
+    title: 'Pronouns',
+    type: 'pronouns',
+    rows: [
+      // [english, nominative, accusative, dative, genitive]
+      ['I',         'ég',   'mig',   'mér',   'mín'],
+      ['you (sg)',  'þú',   'þig',   'þér',   'þín'],
+      ['he',        'hann', 'hann',  'honum', 'hans'],
+      ['she',       'hún',  'hana',  'henni', 'hennar'],
+      ['it',        'það',  'það',   'því',   'þess'],
+      ['we',        'við',  'okkur', 'okkur', 'okkar'],
+      ['you (pl)',  'þið',  'ykkur', 'ykkur', 'ykkar'],
+      ['they (m)',  'þeir', 'þá',    'þeim',  'þeirra'],
+      ['they (f)',  'þær',  'þær',   'þeim',  'þeirra'],
+      ['they (n)',  'þau',  'þau',   'þeim',  'þeirra'],
+    ],
+  },
+  prepositions: {
+    title: 'Prepositions',
+    type: 'words',
+    headers: ['Prep', 'English', 'Example', 'Case'],
+    rows: [
+      ['í',    'in / into',    'í bæinn (into town) · í bænum (in town)',           'acc → motion · dat → location'],
+      ['á',    'on / onto',    'á borðið (onto table) · á borðinu (on table)',       'acc → motion · dat → location'],
+      ['til',  'to / of',      'til Reykjavíkur (to Reykjavík)',                    'genitive always'],
+      ['frá',  'from',         'frá honum (from him) · frá Íslandi (from Iceland)',  'dative always'],
+      ['með',  'with',         'með mér (with me) · með þér (with you)',            'dative always'],
+      ['af',   'off / from',   'af hverju (why) · af borðinu (off the table)',      'dative always'],
+      ['um',   'about / around','um hann (about him) · um daginn (during the day)', 'accusative always'],
+      ['fyrir','for / before', 'fyrir mig (for me) · fyrir viku (a week ago)',      'accusative always'],
+      ['eftir','after',        'eftir mat (after food) · eftir þig (after you)',    'accusative always'],
+      ['við',  'at / by',      'við hlið (beside) · við hann (against him)',        'accusative always'],
+    ],
+  },
+  conjunctions: {
+    title: 'Conjunctions',
+    type: 'words',
+    headers: ['Word', 'English', 'Example', 'Note'],
+    rows: [
+      ['og',           'and',       'ég og þú (you and I)',                                    '—'],
+      ['en',           'but',       'stór en feginn (big but happy)',                          'also "and" in formal writing'],
+      ['eða',          'or',        'kaffi eða te? (coffee or tea?)',                          '—'],
+      ['ef',           'if',        'ef þú vilt (if you want)',                                'introduces conditional clauses'],
+      ['þegar',        'when',      'þegar hann kom (when he arrived)',                        'not hvenær (at what time?)'],
+      ['þó',           'although',  'þó hún sé þreytt (though she is tired)',                 'often with subjunctive mood'],
+      ['vegna þess að','because',   'vegna þess að ég vil (because I want)',                  'most common causal conjunction'],
+      ['en samt',      'but still', 'hann er þreyttur en samt labbar (tired yet still walks)', 'very common in speech'],
+    ],
+  },
+  adverbs: {
+    title: 'Adverbs',
+    type: 'words',
+    headers: ['Word', 'English', 'Example', 'Type'],
+    rows: [
+      ['núna',    'now',         'Ég er núna heima (I am home now)',                   'time'],
+      ['þá',      'then',        'Þá fór hann (Then he went)',                         'time'],
+      ['strax',   'right away',  'Komdu strax! (Come right away!)',                    'time'],
+      ['alltaf',  'always',      'Hún er alltaf glaður (She is always happy)',         'frequency'],
+      ['oft',     'often',       'Við förum oft út (We often go out)',                 'frequency'],
+      ['stundum', 'sometimes',   'Stundum er það kalt (Sometimes it is cold)',         'frequency'],
+      ['aldrei',  'never',       'Hann sefur aldrei snemma (He never sleeps early)',   'frequency'],
+      ['hér',     'here',        'Hann er hér (He is here)',                           'place'],
+      ['þar',     'there',       'Hún er þar (She is there)',                          'place'],
+      ['burt',    'away',        'Farðu burt! (Go away!)',                             'place'],
+      ['vel',     'well',        'Hann talar vel íslensku (He speaks Icelandic well)', 'manner'],
+      ['saman',   'together',    'Við förum saman (We go together)',                   'manner'],
+    ],
+  },
+};
+
 function PronunciationView(){
   const sections = ['vowels','consonants','clusters','aspiration','stress'];
   const [active, setActive] = useState('vowels');
@@ -2659,6 +2956,88 @@ function PronunciationView(){
   );
 }
 
+function GrammarReferenceView(){
+  const sections = ['pronouns','prepositions','conjunctions','adverbs'];
+  const [active, setActive] = useState('pronouns');
+  const sec = GRAMMAR_REF_DATA[active];
+  const tips = {
+    pronouns:     'Pronouns decline through four cases. Nominative is the subject (ég — I). Accusative is the direct object (mig — me). Dative is the indirect object (mér — to me). Genitive shows possession (mín — mine).',
+    prepositions: 'Every preposition governs a specific case — this must be memorised per word. í and á each take accusative for motion ("into/onto") and dative for location ("in/on"). Most others always take the same case.',
+    conjunctions: 'Conjunctions don\'t change form in Icelandic. Þegar (when) is the most commonly confused: it means "at the time that", not "at what time?" — that\'s hvenær.',
+    adverbs:      'Adverbs never decline in Icelandic. Frequency adverbs (alltaf, oft, stundum, aldrei) typically sit just after the verb: "Hún er alltaf glaður".',
+  };
+  return(
+    <div>
+      <div className="pron-nav" style={{marginBottom:'1rem'}}>
+        {sections.map(s=>(
+          <button key={s} className={`pill ${active===s?'active':''}`} onClick={()=>setActive(s)}>
+            {GRAMMAR_REF_DATA[s].title}
+          </button>
+        ))}
+      </div>
+
+      {sec.type==='pronouns' ? (
+        <div className="pron-table-wrap">
+          <table className="pron-table pronoun-table">
+            <thead>
+              <tr>
+                <th>English</th>
+                <th>Nominative<br/><span className="case-hint">subject</span></th>
+                <th>Accusative<br/><span className="case-hint">direct obj</span></th>
+                <th>Dative<br/><span className="case-hint">indirect obj</span></th>
+                <th>Genitive<br/><span className="case-hint">possession</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sec.rows.map(([eng,nom,acc,dat,gen],i)=>(
+                <tr key={i}>
+                  <td className="pron-sounds">{eng}</td>
+                  {[nom,acc,dat,gen].map((form,j)=>(
+                    <td key={j}>
+                      <span className="pron-case-cell">
+                        <button className="pron-play-btn" onClick={()=>playWord(form)} title={`Hear "${form}"`}><SpeakerIcon/></button>
+                        <span className="pron-example icelandic">{form}</span>
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="pron-table-wrap">
+          <table className="pron-table">
+            <thead>
+              <tr>{sec.headers.map(h=><th key={h}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {sec.rows.map(([word,english,example,note],i)=>(
+                <tr key={i}>
+                  <td>
+                    <span className="pron-word-cell">
+                      <button className="pron-play-btn" onClick={()=>playWord(word)} title={`Hear "${word}"`}><SpeakerIcon/></button>
+                      <span className="pron-example icelandic">{word}</span>
+                    </span>
+                  </td>
+                  <td className="pron-sounds">{english}</td>
+                  <td className="pron-note">{example}</td>
+                  <td><span className={`type-tag type-tag-${note.replace(/\s.*/,'')}`}>{note}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="pron-tip-box" style={{marginTop:'1rem'}}>
+        <span className="pron-tip-icon">✦</span>
+        <p className="pron-tip-text">{tips[active]}</p>
+      </div>
+    </div>
+  );
+}
+
 const ChatIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
 const SceneIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 const BookIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
@@ -2675,4 +3054,5 @@ const CefrIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const PronIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>;
 const DrillIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
 const HistoryIcon =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="16" height="16"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg>;
+const LibraryIcon =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="12" y1="6" x2="16" y2="6"/><line x1="12" y1="10" x2="16" y2="10"/></svg>;
 const TrashIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>;

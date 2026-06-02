@@ -268,6 +268,32 @@ def query_endpoint(req: QueryRequest):
 
     return {"chunks": chunks, "query": req.query}
 
+BOOK_TITLES = {
+    "complete_icelandic": "Complete Icelandic",
+    "colloquial-icelandic-the-complete-course-for-beginners": "Colloquial Icelandic",
+}
+
+@app.get("/books")
+def list_books():
+    """List available PDF books with page counts."""
+    books = []
+    for pdf_path in sorted(Path(PDFS_DIR).glob("*.pdf")):
+        try:
+            import fitz
+            doc = fitz.open(str(pdf_path))
+            page_count = len(doc)
+            doc.close()
+        except Exception:
+            page_count = 0
+        source = pdf_path.stem
+        books.append({
+            "filename": pdf_path.name,
+            "source": source,
+            "title": BOOK_TITLES.get(source, source.replace("_"," ").replace("-"," ").title()),
+            "page_count": page_count,
+        })
+    return {"books": books}
+
 @app.get("/sources")
 def list_sources():
     """List all ingested book sources."""
