@@ -685,7 +685,7 @@ function ChatView(){
                     {shownTranslations[msg.id]&&msg.english_translation&&(
                       <p className="msg-translation">{msg.english_translation}</p>
                     )}
-                    {msg.lesson_progress&&<LessonProgressBar progress={msg.lesson_progress}/>}
+                    {chatMode.mode==='lesson'&&msg.lesson_progress&&<LessonProgressBar progress={msg.lesson_progress} title={chatMode.lessonData?.title}/>}
                     {!msg.streaming&&msg.rag_sources&&msg.rag_sources.length>0&&(
                       <div className="rag-sources">
                         {msg.rag_sources.map((s,i)=>{
@@ -993,13 +993,16 @@ function PronunciationPanel({score}){
   );
 }
 
-function LessonProgressBar({progress}){
+function LessonProgressBar({progress, title}){
   if(!progress?.goal_percent) return null;
   const pct=clamp(progress.goal_percent,0,100);
   return(
     <div className="lesson-progress-bar">
       <div className="lpb-fill" style={{width:`${pct}%`}}/>
-      <span className="lpb-label">Lesson goal: {pct}%</span>
+      <span className="lpb-label">
+        {title?`${title} — ${pct}%`:`Lesson goal: ${pct}%`}
+      </span>
+      {progress.goal_note&&<span className="lpb-note">{progress.goal_note}</span>}
     </div>
   );
 }

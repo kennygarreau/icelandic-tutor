@@ -145,6 +145,7 @@ input,textarea{font-family:inherit;color:inherit}
 .lesson-progress-bar{position:relative;height:18px;background:var(--raised);border-radius:9px;overflow:hidden;border:1px solid var(--border);margin-top:.3rem}
 .lpb-fill{height:100%;background:linear-gradient(90deg,var(--aurora-b),var(--aurora-g));transition:width .6s ease;border-radius:9px}
 .lpb-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-family:'Cinzel',serif;letter-spacing:.04em;color:var(--text);mix-blend-mode:difference}
+.lpb-note{font-size:.72rem;color:var(--muted);font-style:italic;margin-top:.2rem;padding:0 .1rem}
 
 /* ── Shared page layout ── */
 .page-layout{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:1.2rem;padding:1.4rem 1.6rem}
