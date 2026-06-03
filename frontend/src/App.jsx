@@ -2376,10 +2376,13 @@ function LibraryView(){
           <div className="lib-reader-progress-fill" style={{width:`${pct}%`}}/>
         </div>
 
-        {/* Page image with overlay arrows */}
+        {/* Fixed viewport-centered arrows — scoped to .main via backdrop-filter */}
+        <button className="lib-page-arrow lib-page-arrow-left"
+          onClick={()=>goToPage(currentPage-1)} disabled={currentPage<=1}>‹</button>
+        <button className="lib-page-arrow lib-page-arrow-right"
+          onClick={()=>goToPage(currentPage+1)} disabled={currentPage>=activeBook.page_count}>›</button>
+
         <div className="lib-page-wrap">
-          <button className="lib-page-arrow lib-page-arrow-left"
-            onClick={()=>goToPage(currentPage-1)} disabled={currentPage<=1}>‹</button>
           {imgLoading&&<div className="lib-page-skeleton"/>}
           <img
             key={`${activeBook.filename}-${currentPage}`}
@@ -2391,8 +2394,6 @@ function LibraryView(){
             onError={()=>setImgLoading(false)}
           />
           {isDone&&!imgLoading&&<div className="lib-page-done-badge">✓</div>}
-          <button className="lib-page-arrow lib-page-arrow-right"
-            onClick={()=>goToPage(currentPage+1)} disabled={currentPage>=activeBook.page_count}>›</button>
         </div>
 
         {/* Nav: page counter + zoom */}

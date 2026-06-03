@@ -553,10 +553,10 @@ input,textarea{font-family:inherit;color:inherit}
 .lib-reader-progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0}
 .lib-reader-progress-fill{height:100%;background:var(--aurora-g);transition:width .4s ease}
 .lib-page-wrap{position:relative;display:flex;justify-content:center;align-items:flex-start;flex:1;min-height:300px;overflow-x:auto}
-.lib-page-arrow{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;background:rgba(13,18,32,.82);border:1px solid var(--border);color:var(--muted);font-size:1.6rem;line-height:1;display:flex;align-items:center;justify-content:center;z-index:2;transition:all var(--tr);flex-shrink:0}
-.lib-page-arrow:hover:not(:disabled){border-color:var(--ice);color:var(--ice-bright);background:rgba(13,18,32,.96)}
+.lib-page-arrow{position:fixed;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(13,18,32,.88);border:1px solid var(--border);color:var(--muted);font-size:1.6rem;line-height:1;display:flex;align-items:center;justify-content:center;z-index:50;transition:all var(--tr)}
+.lib-page-arrow:hover:not(:disabled){border-color:var(--ice);color:var(--ice-bright);background:rgba(13,18,32,.98)}
 .lib-page-arrow:disabled{opacity:.18;cursor:not-allowed}
-.lib-page-arrow-left{left:.5rem}.lib-page-arrow-right{right:.5rem}
+.lib-page-arrow-left{left:12px}.lib-page-arrow-right{right:12px}
 .lib-page-skeleton{width:100%;max-width:700px;aspect-ratio:3/4;background:var(--raised);border-radius:6px;animation:pulse-bg 1.5s ease-in-out infinite}
 @keyframes pulse-bg{0%,100%{opacity:.5}50%{opacity:1}}
 .lib-page-img{max-width:700px;width:100%;height:auto;display:block;border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.5)}
