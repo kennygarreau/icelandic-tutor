@@ -2205,9 +2205,15 @@ function LibraryView(){
   const [searchDone,setSearchDone]   = useState(false);
 
   useEffect(()=>{
-    fetch('/rag/books').then(r=>r.json())
-      .then(d=>{ setBooks(d.books||[]); setBooksLoading(false); })
-      .catch(()=>setBooksLoading(false));
+    Promise.all([
+      fetch('/rag/books').then(r=>r.json()),
+      fetch(`${API}/library/progress`).then(r=>r.json()).catch(()=>({})),
+    ]).then(([booksData, progressData])=>{
+      const books=(booksData.books||[]).map(b=>({
+        ...b, completedCount: progressData[b.filename]||0,
+      }));
+      setBooks(books); setBooksLoading(false);
+    }).catch(()=>setBooksLoading(false));
   },[]);
 
   // Keyboard navigation in reader
@@ -2289,7 +2295,7 @@ function LibraryView(){
       {!booksLoading&&books.length===0&&<div className="empty-state">No PDFs found. Add books to the rag-service/pdfs directory.</div>}
       <div className="lib-books-grid">
         {books.map(b=>{
-          const pagesRead=b._completedCount||0;
+          const pagesRead=b.completedCount||0;
           const pct=b.page_count>0?Math.round((pagesRead/b.page_count)*100):0;
           return(
             <div key={b.filename} className="lib-book-card" onClick={()=>openBook(b)}>
@@ -2354,7 +2360,12 @@ function LibraryView(){
         {/* Header: topbar + search */}
         <div className="lib-reader-header">
           <div className="lib-reader-topbar">
-            <button className="lib-back-btn" onClick={()=>setMode('books')}>← Library</button>
+            <button className="lib-back-btn" onClick={()=>{
+            setMode('books');
+            fetch(`${API}/library/progress`).then(r=>r.json()).then(p=>{
+              setBooks(prev=>prev.map(b=>({...b,completedCount:p[b.filename]||0})));
+            }).catch(()=>{});
+          }}>← Library</button>
             <div className="lib-reader-title">
               <span className="lib-reader-book-name">{activeBook.title}</span>
               <span className="lib-reader-progress">{completedPages.size}/{activeBook.page_count} pages · {pct}%</span>

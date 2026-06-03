@@ -2375,6 +2375,15 @@ def set_reading_progress(req: ReadingProgressReq):
         db.commit()
     return {"filename": req.filename, "page_num": req.page_num, "completed": req.completed}
 
+@app.get("/library/progress")
+def get_all_reading_progress():
+    """Return completed page count per filename — used by the library landing grid."""
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT filename, COUNT(*) as completed FROM reading_progress GROUP BY filename"
+        ).fetchall()
+    return {r["filename"]: r["completed"] for r in rows}
+
 @app.get("/library/progress/{filename}")
 def get_reading_progress(filename: str):
     with get_db() as db:
