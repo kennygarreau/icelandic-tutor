@@ -2228,12 +2228,16 @@ function LibraryView(){
   },[mode,activeBook,currentPage]);
 
   const openBook = async(book)=>{
-    setActiveBook(book); setCurrentPage(1); setPageInput('1');
-    setImgLoading(true); setZoom(1.0); setMode('reader');
+    setActiveBook(book); setImgLoading(true); setZoom(1.0); setMode('reader');
     try{
       const d=await fetch(`${API}/library/progress/${book.filename}`).then(r=>r.json());
-      setCompletedPages(new Set(d.completed_pages));
-    }catch(e){ setCompletedPages(new Set()); }
+      const completed=new Set(d.completed_pages);
+      setCompletedPages(completed);
+      // Resume from first incomplete page; fall back to page 1 if all done
+      let resume=1;
+      for(let p=1;p<=book.page_count;p++){ if(!completed.has(p)){resume=p;break;} }
+      setCurrentPage(resume); setPageInput(String(resume));
+    }catch(e){ setCompletedPages(new Set()); setCurrentPage(1); setPageInput('1'); }
   };
 
   const goToPage=(n)=>{
