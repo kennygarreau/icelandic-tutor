@@ -156,9 +156,7 @@ export default function App(){
     {id:'flashcards',   icon:<CardIcon/>,   label:'Cards'},
     {id:'library',      icon:<LibraryIcon/>,label:'Library'},
     {id:'pronunciation',icon:<PronIcon/>,  label:'Pronunciation'},
-    {id:'heatmap',      icon:<FireIcon/>,  label:'Heatmap'},
     {id:'progress',  icon:<ChartIcon/>, label:'Progress'},
-    {id:'cefr',      icon:<CefrIcon/>,  label:'CEFR'},
   ];
   const goChat=(mode,id)=>{setTab('chat'); setTimeout(()=>launchChat(mode,id),50);};
   useEffect(()=>{_goToTab=setTab;return()=>{_goToTab=null;};},[]);
@@ -204,11 +202,9 @@ export default function App(){
         {tab==='lessons'    && <LessonsView   onStart={(id)=>goChat('lesson',id)}/>}
         {tab==='drill'      && <DrillView/>}
         {tab==='pronunciation' && <PronunciationView/>}
-        {tab==='heatmap'    && <HeatmapView/>}
-        {tab==='progress'   && <ProgressView/>}
+        {tab==='progress'   && <ProgressShell/>}
         {tab==='flashcards' && <FlashcardsView/>}
         {tab==='library'    && <LibraryView/>}
-        {tab==='cefr'       && <CefrView/>}
       </main>
       <nav className="bottom-nav" id="bottom-nav" style={{display:'none'}}>
         {TABS.map(t=>(
@@ -1358,6 +1354,22 @@ function HeatmapView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // PROGRESS VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
+function ProgressShell(){
+  const [sub,setSub]=useState('progress');
+  return(
+    <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+      <div className="fc-section-tabs">
+        <button className={`fc-section-tab ${sub==='progress'?'active':''}`} onClick={()=>setSub('progress')}>Progress</button>
+        <button className={`fc-section-tab ${sub==='heatmap'?'active':''}`}  onClick={()=>setSub('heatmap')}>Heatmap</button>
+        <button className={`fc-section-tab ${sub==='cefr'?'active':''}`}     onClick={()=>setSub('cefr')}>CEFR</button>
+      </div>
+      {sub==='progress'&&<ProgressView/>}
+      {sub==='heatmap'&&<HeatmapView/>}
+      {sub==='cefr'&&<CefrView/>}
+    </div>
+  );
+}
+
 function ProgressView(){
   const [data,setData]=useState(null);const [days,setDays]=useState(30);const [loading,setLoading]=useState(true);
   useEffect(()=>{setLoading(true);fetch(`${API}/progress?days=${days}`).then(r=>r.json()).then(d=>{setData(d);setLoading(false);});},[days]);
