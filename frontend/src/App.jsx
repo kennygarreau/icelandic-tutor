@@ -237,7 +237,7 @@ function ChatView(){
   const [correction,   setCorrection]   = useState(WELCOME_MSG.correction);
   const [newVocab,     setNewVocab]     = useState([]);
   const [autoPlay,     setAutoPlay]     = useState(true);
-  const [speed,        setSpeed]        = useState(0.85);
+  const [speed,        setSpeed]        = useState(()=>parseFloat(localStorage.getItem('tts_speed')||'0.85'));
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [chatMode,  setChatMode]  = useState({mode:'free',id:null,label:''});
   const [pronScore, setPronScore] = useState(null);
@@ -739,7 +739,7 @@ function ChatView(){
           autoPlay={autoPlay}
           onAutoPlayChange={setAutoPlay}
           speed={speed}
-          onSpeedChange={setSpeed}
+          onSpeedChange={v=>{setSpeed(v);localStorage.setItem('tts_speed',v);}}
           inputRef={inputRef}
           currentAudioRef={currentAudioRef}
           onStopAudio={()=>setPlayingId(null)}
