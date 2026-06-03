@@ -2198,6 +2198,7 @@ function LibraryView(){
   const [completedPages,setCompletedPages] = useState(new Set());
   const [pageInput,setPageInput]     = useState('1');
   const [imgLoading,setImgLoading]   = useState(true);
+  const [zoom,setZoom]               = useState(1.0);
   const [searchQuery,setSearchQuery] = useState('');
   const [searchResults,setSearchResults] = useState([]);
   const [searching,setSearching]     = useState(false);
@@ -2222,7 +2223,7 @@ function LibraryView(){
 
   const openBook = async(book)=>{
     setActiveBook(book); setCurrentPage(1); setPageInput('1');
-    setImgLoading(true); setMode('reader');
+    setImgLoading(true); setZoom(1.0); setMode('reader');
     try{
       const d=await fetch(`${API}/library/progress/${book.filename}`).then(r=>r.json());
       setCompletedPages(new Set(d.completed_pages));
@@ -2349,34 +2350,52 @@ function LibraryView(){
     const pct=activeBook.page_count>0?Math.round((completedPages.size/activeBook.page_count)*100):0;
     return(
       <div className="page-layout">
-        <div className="lib-reader-topbar">
-          <button className="lib-back-btn" onClick={()=>setMode('books')}>← Library</button>
-          <div className="lib-reader-title">
-            <span className="lib-reader-book-name">{activeBook.title}</span>
-            <span className="lib-reader-progress">{completedPages.size}/{activeBook.page_count} pages · {pct}%</span>
+
+        {/* Header: topbar + search */}
+        <div className="lib-reader-header">
+          <div className="lib-reader-topbar">
+            <button className="lib-back-btn" onClick={()=>setMode('books')}>← Library</button>
+            <div className="lib-reader-title">
+              <span className="lib-reader-book-name">{activeBook.title}</span>
+              <span className="lib-reader-progress">{completedPages.size}/{activeBook.page_count} pages · {pct}%</span>
+            </div>
+            <button className={`lib-complete-btn${isDone?' done':''}`} onClick={toggleComplete}>
+              {isDone?'✓ Complete':'Mark complete'}
+            </button>
           </div>
-          <button className={`lib-complete-btn${isDone?' done':''}`} onClick={toggleComplete}>
-            {isDone?'✓ Complete':'Mark complete'}
-          </button>
+          <form className="lib-search-bar" onSubmit={doSearch}>
+            <input className="lib-search-input" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+              placeholder="Search books for a topic… e.g. ordering at a café"/>
+            <button className="lib-search-btn" type="submit" disabled={searching||!searchQuery.trim()}>
+              {searching?'Searching…':'Search books'}
+            </button>
+          </form>
         </div>
 
         <div className="lib-reader-progress-bar">
           <div className="lib-reader-progress-fill" style={{width:`${pct}%`}}/>
         </div>
 
+        {/* Page image with overlay arrows */}
         <div className="lib-page-wrap">
+          <button className="lib-page-arrow lib-page-arrow-left"
+            onClick={()=>goToPage(currentPage-1)} disabled={currentPage<=1}>‹</button>
           {imgLoading&&<div className="lib-page-skeleton"/>}
           <img
             key={`${activeBook.filename}-${currentPage}`}
-            className="lib-page-img" style={{display:imgLoading?'none':'block'}}
+            className="lib-page-img"
+            style={{display:imgLoading?'none':'block', width:`${zoom*100}%`, maxWidth:`${zoom*700}px`}}
             src={`/rag/pdfs/${activeBook.filename}/page/${currentPage}`}
             alt={`Page ${currentPage}`}
             onLoad={()=>setImgLoading(false)}
             onError={()=>setImgLoading(false)}
           />
           {isDone&&!imgLoading&&<div className="lib-page-done-badge">✓</div>}
+          <button className="lib-page-arrow lib-page-arrow-right"
+            onClick={()=>goToPage(currentPage+1)} disabled={currentPage>=activeBook.page_count}>›</button>
         </div>
 
+        {/* Nav: page counter + zoom */}
         <div className="lib-nav-row">
           <button className="lib-nav-btn" onClick={()=>goToPage(currentPage-1)} disabled={currentPage<=1}>←</button>
           <div className="lib-page-input-wrap">
@@ -2388,15 +2407,13 @@ function LibraryView(){
             <span className="lib-page-total">/ {activeBook.page_count}</span>
           </div>
           <button className="lib-nav-btn" onClick={()=>goToPage(currentPage+1)} disabled={currentPage>=activeBook.page_count}>→</button>
+          <div className="lib-zoom-controls">
+            <button className="lib-zoom-btn" onClick={()=>setZoom(z=>Math.max(0.5,+(z-0.25).toFixed(2)))} disabled={zoom<=0.5} title="Zoom out">−</button>
+            <span className="lib-zoom-label">{Math.round(zoom*100)}%</span>
+            <button className="lib-zoom-btn" onClick={()=>setZoom(z=>Math.min(3,+(z+0.25).toFixed(2)))} disabled={zoom>=3} title="Zoom in">+</button>
+          </div>
         </div>
 
-        <form className="lib-search-bar" onSubmit={doSearch}>
-          <input className="lib-search-input" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
-            placeholder="Search both books for a topic…"/>
-          <button className="lib-search-btn" type="submit" disabled={searching||!searchQuery.trim()}>
-            {searching?'…':'Search'}
-          </button>
-        </form>
       </div>
     );
   }

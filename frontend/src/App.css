@@ -542,7 +542,8 @@ input,textarea{font-family:inherit;color:inherit}
 .lib-result-text{font-size:.88rem;color:var(--text);opacity:.85;line-height:1.5}
 .lib-result-open{align-self:flex-start;font-size:.8rem;color:var(--aurora-b);padding:.2rem .5rem;border:1px solid rgba(56,178,232,.3);border-radius:6px;transition:all var(--tr)}
 .lib-result-open:hover{background:rgba(56,178,232,.08)}
-.lib-reader-topbar{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;flex-shrink:0}
+.lib-reader-header{display:flex;flex-direction:column;gap:.55rem;flex-shrink:0}
+.lib-reader-topbar{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
 .lib-reader-title{flex:1;display:flex;flex-direction:column;gap:.1rem;min-width:0}
 .lib-reader-book-name{font-family:'Cinzel',serif;font-size:.9rem;font-weight:600;color:var(--ice-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lib-reader-progress{font-size:.72rem;color:var(--muted)}
@@ -551,7 +552,11 @@ input,textarea{font-family:inherit;color:inherit}
 .lib-complete-btn.done{background:rgba(61,232,160,.1);border-color:var(--aurora-g);color:var(--aurora-g)}
 .lib-reader-progress-bar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;flex-shrink:0}
 .lib-reader-progress-fill{height:100%;background:var(--aurora-g);transition:width .4s ease}
-.lib-page-wrap{position:relative;display:flex;justify-content:center;align-items:flex-start;flex:1;min-height:300px}
+.lib-page-wrap{position:relative;display:flex;justify-content:center;align-items:flex-start;flex:1;min-height:300px;overflow-x:auto}
+.lib-page-arrow{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;background:rgba(13,18,32,.82);border:1px solid var(--border);color:var(--muted);font-size:1.6rem;line-height:1;display:flex;align-items:center;justify-content:center;z-index:2;transition:all var(--tr);flex-shrink:0}
+.lib-page-arrow:hover:not(:disabled){border-color:var(--ice);color:var(--ice-bright);background:rgba(13,18,32,.96)}
+.lib-page-arrow:disabled{opacity:.18;cursor:not-allowed}
+.lib-page-arrow-left{left:.5rem}.lib-page-arrow-right{right:.5rem}
 .lib-page-skeleton{width:100%;max-width:700px;aspect-ratio:3/4;background:var(--raised);border-radius:6px;animation:pulse-bg 1.5s ease-in-out infinite}
 @keyframes pulse-bg{0%,100%{opacity:.5}50%{opacity:1}}
 .lib-page-img{max-width:700px;width:100%;height:auto;display:block;border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.5)}
@@ -563,6 +568,10 @@ input,textarea{font-family:inherit;color:inherit}
 .lib-page-input{width:56px;text-align:center;background:var(--raised);border:1px solid var(--border);border-radius:6px;padding:.35rem .4rem;font-size:.9rem;color:var(--text);outline:none}
 .lib-page-input:focus{border-color:rgba(168,200,232,.4)}
 .lib-page-total{font-size:.85rem;color:var(--muted)}
+.lib-zoom-controls{display:flex;align-items:center;gap:.35rem;margin-left:.6rem;padding-left:.7rem;border-left:1px solid var(--border)}
+.lib-zoom-btn{width:26px;height:26px;border-radius:6px;border:1px solid var(--border);color:var(--muted);font-size:1rem;display:flex;align-items:center;justify-content:center;transition:all var(--tr)}
+.lib-zoom-btn:hover:not(:disabled){border-color:var(--ice);color:var(--ice-bright)}.lib-zoom-btn:disabled{opacity:.3;cursor:not-allowed}
+.lib-zoom-label{font-size:.75rem;color:var(--muted);min-width:3.2ch;text-align:center}
 
 /* Welcome modal */
 .welcome-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;display:flex;align-items:center;justify-content:center;padding:1.2rem;backdrop-filter:blur(4px)}
