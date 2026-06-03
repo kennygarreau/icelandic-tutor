@@ -3,13 +3,13 @@ Icelandic Tutor — Backend v3
 New: lesson curriculum, scenario/topic mode, mistake heatmap,
      pronunciation score proxying, error pattern analysis.
 """
-import asyncio, os, json, re, sqlite3, logging, httpx, uuid, time, random
+import asyncio, os, json, re, sqlite3, logging, httpx, uuid, time, random, base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import Literal, Optional
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -54,6 +54,15 @@ ANTHROPIC_KEY   = os.getenv("ANTHROPIC_API_KEY", "")
 LITELLM_URL     = os.getenv("LITELLM_URL",     "http://localhost:4000")
 LITELLM_KEY     = os.getenv("LITELLM_API_KEY", "sk-anything")
 LITELLM_MODEL   = os.getenv("LITELLM_MODEL",   "ollama/qwen3:32b")
+IMAGE_PROVIDER  = os.getenv("IMAGE_PROVIDER",  "sd")        # sd | unsplash
+SD_URL          = os.getenv("SD_URL",          "http://spark-f73a:7860")
+SD_MODEL        = os.getenv("SD_MODEL",        "")
+SD_PROMPT_TMPL  = os.getenv("SD_PROMPT_TEMPLATE",
+    "a clear product-style photograph of {word}, isolated on clean white background, "
+    "no text, no labels, no people, educational flashcard, high quality")
+UNSPLASH_KEY    = os.getenv("UNSPLASH_ACCESS_KEY", "")
+IMAGES_DIR      = "/data/images"
+os.makedirs(IMAGES_DIR, exist_ok=True)
 WHISPER_URL     = os.getenv("WHISPER_URL",     "http://whisper:8001")
 TTS_URL         = os.getenv("TTS_URL",         "http://tts:8002")
 PRONUN_URL      = os.getenv("PRONUN_URL",      "http://whisper:8001")
@@ -180,6 +189,10 @@ def init_db():
         # Migrations
         try:
             c.execute("ALTER TABLE flashcards ADD COLUMN part_of_speech TEXT DEFAULT ''")
+        except Exception:
+            pass
+        try:
+            c.execute("ALTER TABLE flashcards ADD COLUMN image_url TEXT DEFAULT NULL")
         except Exception:
             pass
         # Make pronunciation_log.session_id nullable (recreate if NOT NULL constraint present)
@@ -762,6 +775,50 @@ Guidelines:
 - notes: highlight one interesting grammar point (e.g. "Uses dative experiencer construction" or "Subjunctive after 'ef'"); leave empty string if nothing notable
 - Never duplicate icelandic content within the batch"""
 
+VISUAL_GEN_PROMPT = """You are an Icelandic vocabulary expert. Generate exactly {count} flashcard entries for visual/image-based learning at {level} level on the topic: {topic}.
+
+Return ONLY a valid JSON array, no markdown:
+[{{"icelandic":"hestur","english":"horse","notes":"masculine noun (m.)","category":"visual","part_of_speech":"noun"}}]
+
+Rules:
+- Choose ONLY concrete, visually distinct nouns that can be clearly photographed
+- No abstract concepts, emotions, verbs, adverbs, or grammar terms
+- beginner: common household items, food, animals, everyday objects
+- intermediate: less common objects, nature, transport, occupations
+- advanced: specific items, Iceland-specific things (skyr, geysir, fjörður, lopapeysa)
+- Never duplicate icelandic values within the batch"""
+
+async def call_sd(english_word: str, card_id: int) -> str:
+    prompt = SD_PROMPT_TMPL.format(word=english_word)
+    payload = {
+        "prompt": prompt,
+        "negative_prompt": "text, watermark, letters, words, blurry, low quality, nsfw, people, faces",
+        "steps": 20, "width": 512, "height": 512, "cfg_scale": 7,
+    }
+    if SD_MODEL:
+        payload["override_settings"] = {"sd_model_checkpoint": SD_MODEL}
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.post(f"{SD_URL}/sdapi/v1/txt2img", json=payload)
+        r.raise_for_status()
+    img_bytes = base64.b64decode(r.json()["images"][0])
+    path = os.path.join(IMAGES_DIR, f"{card_id}.png")
+    with open(path, "wb") as f:
+        f.write(img_bytes)
+    return f"/api/images/{card_id}"
+
+async def call_unsplash(english_word: str, card_id: int) -> str:
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get("https://api.unsplash.com/photos/random",
+                        params={"query": english_word, "orientation": "squarish"},
+                        headers={"Authorization": f"Client-ID {UNSPLASH_KEY}"})
+        r.raise_for_status()
+    return r.json()["urls"]["regular"]
+
+async def call_image(english_word: str, card_id: int) -> str:
+    if IMAGE_PROVIDER == "unsplash":
+        return await call_unsplash(english_word, card_id)
+    return await call_sd(english_word, card_id)
+
 HEATMAP_ANALYSIS_PROMPT = """You are an Icelandic language expert analyzing a student's error patterns.
 
 Given these error records, identify:
@@ -1065,7 +1122,7 @@ class FlashcardCreate(BaseModel):
 class FlashcardGenReq(BaseModel):
     count: int = 10; level: str = "beginner"
     topic: str = "common greetings and everyday vocabulary"
-    type: str = "vocabulary"  # vocabulary | sentence
+    type: str = "vocabulary"  # vocabulary | sentence | visual
 
 class LessonProgressUpdate(BaseModel):
     lesson_id: str; completed: bool; score: int = 0; session_id: Optional[str]=None
@@ -1804,7 +1861,37 @@ def review_card(card_id:int,review:FlashcardReview):
 def delete_card(card_id:int):
     with get_db() as db:
         db.execute("DELETE FROM flashcards WHERE id=?",(card_id,)); db.commit()
+    # Clean up generated image if it exists
+    img_path = os.path.join(IMAGES_DIR, f"{card_id}.png")
+    if os.path.exists(img_path):
+        os.remove(img_path)
     return {"deleted":card_id}
+
+@app.get("/images/{card_id}")
+def serve_card_image(card_id: int):
+    path = os.path.join(IMAGES_DIR, f"{card_id}.png")
+    if not os.path.exists(path):
+        raise HTTPException(404, "Image not found")
+    return FileResponse(path, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+@app.post("/flashcards/{card_id}/generate-image")
+async def generate_card_image(card_id: int, force: bool = False):
+    with get_db() as db:
+        card = db.execute("SELECT * FROM flashcards WHERE id=?", (card_id,)).fetchone()
+        if not card:
+            raise HTTPException(404, "Card not found")
+        card = dict(card)
+    if card.get("image_url") and not force:
+        return {"image_url": card["image_url"], "card_id": card_id}
+    try:
+        url = await call_image(card["english"], card_id)
+    except Exception as e:
+        raise HTTPException(502, f"Image generation failed: {e}")
+    with get_db() as db:
+        db.execute("UPDATE flashcards SET image_url=? WHERE id=?", (url, card_id))
+        db.commit()
+    return {"image_url": url, "card_id": card_id}
 
 @app.get("/flashcards/quiz")
 def get_vocab_quiz(count: int = 10):
@@ -1868,6 +1955,8 @@ def submit_quiz_results(req: QuizResultsReq):
 async def generate_flashcards(req:FlashcardGenReq):
     if req.type == "sentence":
         system = SENTENCE_GEN_PROMPT.format(count=req.count, level=req.level, topic=req.topic)
+    elif req.type == "visual":
+        system = VISUAL_GEN_PROMPT.format(count=req.count, level=req.level, topic=req.topic)
     else:
         system=FLASHCARD_GEN_PROMPT.format(count=req.count,level=req.level,topic=req.topic)
     try: raw=await call_llm([{"role":"user","content":"Generate now."}],system,2000)

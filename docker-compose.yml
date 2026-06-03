@@ -79,6 +79,11 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://spark-f73a:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:32b}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - IMAGE_PROVIDER=${IMAGE_PROVIDER:-sd}
+      - SD_URL=${SD_URL:-http://spark-f73a:7860}
+      - SD_MODEL=${SD_MODEL:-}
+      - SD_PROMPT_TEMPLATE=${SD_PROMPT_TEMPLATE:-}
+      - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY:-}
       - LITELLM_URL=${LITELLM_URL:-http://localhost:4000}
       - LITELLM_API_KEY=${LITELLM_API_KEY:-sk-anything}
       - LITELLM_MODEL=${LITELLM_MODEL:-ollama/mistral-nemo:12b}

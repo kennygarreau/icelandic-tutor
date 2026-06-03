@@ -16,6 +16,16 @@ const WELCOME_MSG = {
 };
 
 function clamp(v,lo,hi){return Math.max(lo,Math.min(hi,v));}
+function levenshtein(a,b){
+  if(a===b)return 0;
+  const m=a.length,n=b.length;
+  const row=Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){
+    let prev=row[0];row[0]=i;
+    for(let j=1;j<=n;j++){const t=row[j];row[j]=a[i-1]===b[j-1]?prev:1+Math.min(prev,row[j],row[j-1]);prev=t;}
+  }
+  return row[n];
+}
 
 let _launchChat = null;
 function launchChat(mode,id){_launchChat?.(mode,id);}
@@ -1471,12 +1481,17 @@ function ProgressView(){
 const SENTENCE_CATS = ['phrase','sentence'];
 
 function FlashcardsView(){
-  const [section,setSection]=useState('vocabulary'); // 'vocabulary' | 'sentences'
+  const [section,setSection]=useState('vocabulary'); // 'vocabulary' | 'sentences' | 'visual'
   const [mode,setMode]=useState('browse');const [cards,setCards]=useState([]);const [dueCards,setDueCards]=useState([]);
   const [loading,setLoading]=useState(true);const [filter,setFilter]=useState('all');const [posFilter,setPosFilter]=useState('all');
   const [newIs,setNewIs]=useState('');const [newEn,setNewEn]=useState('');const [newNote,setNewNote]=useState('');const [newCat,setNewCat]=useState('vocabulary');const [newPos,setNewPos]=useState('');
   const [genTopic,setGenTopic]=useState('common greetings and everyday phrases');const [genCount,setGenCount]=useState(10);const [genLevel,setGenLevel]=useState('beginner');const [genLoading,setGenLoading]=useState(false);
   const [reviewIdx,setReviewIdx]=useState(0);const [showAns,setShowAns]=useState(false);const [revResult,setRevResult]=useState(null);
+  // Visual-specific state
+  const [visAnswer,setVisAnswer]=useState('');const [visAnswered,setVisAnswered]=useState(false);const [visResult,setVisResult]=useState(null);
+  const [visGenProgress,setVisGenProgress]=useState(null); // {current, total}
+  const [refreshingImgId,setRefreshingImgId]=useState(null);
+  const visAnswerRef=useRef(null);
   const [fcRecording,setFcRecording]=useState(false);const [fcPronScore,setFcPronScore]=useState(null);const [fcScoring,setFcScoring]=useState(false);
   const fcMediaRecorder=useRef(null);const fcAudioChunks=useRef([]);
   const [quizCount,setQuizCount]=useState(10);const [quizQs,setQuizQs]=useState([]);const [quizIdx,setQuizIdx]=useState(0);
@@ -1495,10 +1510,19 @@ function FlashcardsView(){
   useEffect(()=>{loadCards();},[]);
 
   const isSentSec = section==='sentences';
-  const sectionCards    = isSentSec ? cards.filter(c=>SENTENCE_CATS.includes(c.category))    : cards.filter(c=>!SENTENCE_CATS.includes(c.category));
-  const sectionDueCards = isSentSec ? dueCards.filter(c=>SENTENCE_CATS.includes(c.category)) : dueCards.filter(c=>!SENTENCE_CATS.includes(c.category));
-  const filtered = isSentSec
-    ? sectionCards.filter(c=>filter==='all'||c.category===filter)
+  const isVisSec  = section==='visual';
+  const sectionCards = isVisSec
+    ? cards.filter(c=>c.category==='visual')
+    : isSentSec
+    ? cards.filter(c=>SENTENCE_CATS.includes(c.category))
+    : cards.filter(c=>!SENTENCE_CATS.includes(c.category)&&c.category!=='visual');
+  const sectionDueCards = isVisSec
+    ? dueCards.filter(c=>c.category==='visual')
+    : isSentSec
+    ? dueCards.filter(c=>SENTENCE_CATS.includes(c.category))
+    : dueCards.filter(c=>!SENTENCE_CATS.includes(c.category)&&c.category!=='visual');
+  const filtered = (isSentSec||isVisSec)
+    ? sectionCards
     : sectionCards.filter(c=>(filter==='all'||c.category===filter)&&(posFilter==='all'||c.part_of_speech===posFilter));
   const reviewCard=sectionDueCards[reviewIdx];
 
@@ -1509,9 +1533,10 @@ function FlashcardsView(){
     // Remove the reviewed card from dueCards immediately so the badge reflects reality
     setDueCards(prev=>{
       const next=prev.filter(c=>c.id!==cardId);
-      const sectionNext=isSentSec?next.filter(c=>SENTENCE_CATS.includes(c.category)):next.filter(c=>!SENTENCE_CATS.includes(c.category));
+      const sectionNext=isVisSec?next.filter(c=>c.category==='visual'):isSentSec?next.filter(c=>SENTENCE_CATS.includes(c.category)):next.filter(c=>!SENTENCE_CATS.includes(c.category)&&c.category!=='visual');
       setTimeout(()=>{
         setShowAns(false);setRevResult(null);setFcPronScore(null);
+        setVisAnswer('');setVisAnswered(false);setVisResult(null);
         if(sectionNext.length===0){loadCards();setReviewIdx(0);setMode('browse');}
         else setReviewIdx(i=>Math.min(i,sectionNext.length-1));
       },700);
@@ -1521,17 +1546,61 @@ function FlashcardsView(){
 
   const handleAdd=async(e)=>{
     e.preventDefault();if(!newIs.trim()||!newEn.trim())return;
-    await fetch(`${API}/flashcards`,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({icelandic:newIs,english:newEn,notes:newNote,category:newCat,part_of_speech:newPos})});
-    setNewIs('');setNewEn('');setNewNote('');setNewCat('vocabulary');setNewPos('');
+    const card=await fetch(`${API}/flashcards`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({icelandic:newIs,english:newEn,notes:newNote,category:newCat,part_of_speech:newPos})}).then(r=>r.json());
+    setNewIs('');setNewEn('');setNewNote('');setNewCat(isVisSec?'visual':'vocabulary');setNewPos('');
     loadCards();setMode('browse');
+    if(isVisSec&&card?.id){
+      fetch(`${API}/flashcards/${card.id}/generate-image`,{method:'POST'}).then(r=>r.json())
+        .then(d=>{const upd=c=>c.id===card.id?{...c,image_url:d.image_url}:c;
+          setCards(p=>p.map(upd));setDueCards(p=>p.map(upd));}).catch(()=>{});
+    }
   };
 
   const handleGenerate=async()=>{
+    if(isVisSec){ await handleVisGenerate(); return; }
     setGenLoading(true);
     await fetch(`${API}/flashcards/generate`,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({count:genCount,level:genLevel,topic:genTopic,type:isSentSec?'sentence':'vocabulary'})});
     await loadCards();setGenLoading(false);setMode('browse');
+  };
+
+  const handleVisGenerate=async()=>{
+    setGenLoading(true);
+    try{
+      const res=await fetch(`${API}/flashcards/generate`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({count:genCount,level:genLevel,topic:genTopic,type:'visual'})}).then(r=>r.json());
+      const ids=res.ids||[];
+      if(!ids.length){setGenLoading(false);return;}
+      setVisGenProgress({current:0,total:ids.length});
+      for(let i=0;i<ids.length;i++){
+        try{await fetch(`${API}/flashcards/${ids[i]}/generate-image`,{method:'POST'});}
+        catch(e){console.error(`Image gen failed for card ${ids[i]}:`,e);}
+        setVisGenProgress({current:i+1,total:ids.length});
+      }
+      await loadCards();setVisGenProgress(null);setMode('browse');
+    }catch(e){console.error(e);}
+    setGenLoading(false);
+  };
+
+  const refreshImage=async(cardId)=>{
+    setRefreshingImgId(cardId);
+    try{
+      const d=await fetch(`${API}/flashcards/${cardId}/generate-image?force=true`,{method:'POST'}).then(r=>r.json());
+      const update=c=>c.id===cardId?{...c,image_url:d.image_url}:c;
+      setCards(prev=>prev.map(update));setDueCards(prev=>prev.map(update));
+    }catch(e){console.error(e);}
+    setRefreshingImgId(null);
+  };
+
+  const checkVisAnswer=()=>{
+    if(!visAnswer.trim()||!reviewCard)return;
+    const given=visAnswer.trim().toLowerCase().normalize('NFC');
+    const expected=reviewCard.icelandic.toLowerCase().normalize('NFC');
+    const dist=levenshtein(given,expected);
+    const correct=dist===0; const nearMiss=!correct&&dist<=1;
+    setVisResult({correct:correct||nearMiss,nearMiss,expected:reviewCard.icelandic,given:visAnswer.trim()});
+    setVisAnswered(true);
   };
 
   const handleDelete=async(id)=>{
@@ -1607,7 +1676,7 @@ function FlashcardsView(){
           {section!=='reference'&&<span className="badge">{sectionDueCards.length} due</span>}
           {section!=='reference'&&<span className="badge badge-muted">{sectionCards.length} total</span>}
           {section!=='reference'&&<div className="level-pills">
-            {(isSentSec?['browse','review','add','generate']:['browse','review','quiz','add','generate']).map(m=>(
+            {((isSentSec||isVisSec)?['browse','review','add','generate']:['browse','review','quiz','add','generate']).map(m=>(
               <button key={m} className={`pill ${mode===m?'active':''}`} onClick={()=>{setMode(m);setReviewIdx(0);setShowAns(false);if(m==='quiz')setQuizState('start');}}>
                 {m.charAt(0).toUpperCase()+m.slice(1)}
                 {m==='review'&&sectionDueCards.length>0&&<span className="pill-badge">{sectionDueCards.length}</span>}
@@ -1621,12 +1690,17 @@ function FlashcardsView(){
         <button className={`fc-section-tab ${section==='vocabulary'?'active':''}`}
           onClick={()=>{setSection('vocabulary');setMode('browse');setReviewIdx(0);setShowAns(false);setFilter('all');setPosFilter('all');setNewCat('vocabulary');}}>
           Vocabulary
-          <span className="fc-sec-count">{cards.filter(c=>!SENTENCE_CATS.includes(c.category)).length}</span>
+          <span className="fc-sec-count">{cards.filter(c=>!SENTENCE_CATS.includes(c.category)&&c.category!=='visual').length}</span>
         </button>
         <button className={`fc-section-tab ${section==='sentences'?'active':''}`}
           onClick={()=>{setSection('sentences');setMode('browse');setReviewIdx(0);setShowAns(false);setFilter('all');setNewCat('sentence');}}>
           Sentences
           <span className="fc-sec-count">{cards.filter(c=>SENTENCE_CATS.includes(c.category)).length}</span>
+        </button>
+        <button className={`fc-section-tab ${isVisSec?'active':''}`}
+          onClick={()=>{setSection('visual');setMode('browse');setReviewIdx(0);setShowAns(false);setNewCat('visual');}}>
+          Visual
+          <span className="fc-sec-count">{cards.filter(c=>c.category==='visual').length}</span>
         </button>
         <button className={`fc-section-tab ${section==='reference'?'active':''}`}
           onClick={()=>setSection('reference')}>
@@ -1640,8 +1714,52 @@ function FlashcardsView(){
         <div className="review-area">
           {sectionDueCards.length===0?(
             <div className="review-done">
-              <div className="done-icon">✦</div><h3>All caught up!</h3><p>No {isSentSec?'sentences':'cards'} due.</p>
-              <button className="pill active" onClick={()=>setMode('browse')}>Browse {isSentSec?'sentences':'cards'}</button>
+              <div className="done-icon">✦</div><h3>All caught up!</h3>
+              <p>No {isVisSec?'visual cards':isSentSec?'sentences':'cards'} due.</p>
+              <button className="pill active" onClick={()=>setMode('browse')}>Browse</button>
+            </div>
+          ):isVisSec?(
+            /* ── Visual card — image front, type answer ── */
+            <div className="vis-review-card">
+              <div className="fc-progress">{reviewIdx+1} / {sectionDueCards.length}</div>
+              <div className="vis-img-wrap">
+                {reviewCard?.image_url
+                  ? <img className="vis-review-img" src={reviewCard.image_url} alt="Visual card"/>
+                  : <div className="vis-img-placeholder"><span>No image</span></div>}
+                <button className="vis-refresh-btn" title="Try a different image"
+                  onClick={()=>refreshImage(reviewCard.id)} disabled={refreshingImgId===reviewCard?.id}>
+                  {refreshingImgId===reviewCard?.id?'…':'🔄'}
+                </button>
+              </div>
+              {!visAnswered?(
+                <>
+                  <p className="vis-prompt">What is this in Icelandic?</p>
+                  <div className="vis-answer-row">
+                    <input ref={visAnswerRef} className="vis-answer-input" value={visAnswer}
+                      onChange={e=>setVisAnswer(e.target.value)}
+                      onKeyDown={e=>e.key==='Enter'&&checkVisAnswer()}
+                      placeholder="Type the Icelandic word…" autoComplete="off" autoCorrect="off" spellCheck="false"/>
+                    <button className="vis-check-btn" onClick={checkVisAnswer} disabled={!visAnswer.trim()}>Check</button>
+                  </div>
+                </>
+              ):(
+                <>
+                  <div className={`vis-result ${visResult?.correct?'vis-result-correct':'vis-result-wrong'}`}>
+                    <span className="vis-result-icon">{visResult?.correct?'✓':'✗'}</span>
+                    <div>
+                      {visResult?.nearMiss&&<p className="vis-result-nearmiss">Close — watch the spelling!</p>}
+                      {!visResult?.correct&&<p>Correct: <strong className="icelandic-inline">{visResult?.expected}</strong></p>}
+                      <p className="vis-result-english">{reviewCard?.english}</p>
+                      {reviewCard?.notes&&<p className="vis-result-note">{reviewCard.notes}</p>}
+                    </div>
+                    <button className="vis-tts-btn" onClick={()=>playWord(reviewCard?.icelandic)} title="Hear it"><SpeakerIcon/></button>
+                  </div>
+                  <div className="fc-actions">
+                    <button className="fc-btn fc-wrong" onClick={()=>handleReview(false)}><span>✗</span>Again</button>
+                    <button className="fc-btn fc-correct" onClick={()=>handleReview(true)}><span>✓</span>Got it</button>
+                  </div>
+                </>
+              )}
             </div>
           ):isSentSec?(
             /* ── Sentence flip card — English front, Icelandic back ── */
@@ -1810,11 +1928,12 @@ function FlashcardsView(){
 
       {section!=='reference' && mode==='add'&&(
         <form className="add-card-form" onSubmit={handleAdd}>
-          <h3 className="form-title">Add a {isSentSec?'sentence':'flashcard'}</h3>
-          <div className="form-group"><label>{isSentSec?'Icelandic sentence':'Icelandic'}</label><input value={newIs} onChange={e=>setNewIs(e.target.value)} placeholder={isSentSec?'e.g. Hvernig hefur þú það í dag?':'e.g. Góðan daginn'} required/></div>
-          <div className="form-group"><label>{isSentSec?'English equivalent':'English'}</label><input value={newEn} onChange={e=>setNewEn(e.target.value)} placeholder={isSentSec?'e.g. How are you today?':'e.g. Good morning'} required/></div>
-          <div className="form-group"><label>Notes</label><input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder={isSentSec?'Grammar note (optional)':'Grammar note or example'}/></div>
-          {!isSentSec&&(
+          <h3 className="form-title">Add a {isVisSec?'visual card':isSentSec?'sentence':'flashcard'}</h3>
+          {isVisSec&&<p className="vis-gen-note">An image will be generated automatically after saving.</p>}
+          <div className="form-group"><label>Icelandic {isVisSec?'word':isSentSec?'sentence':''}</label><input value={newIs} onChange={e=>setNewIs(e.target.value)} placeholder={isVisSec?'e.g. hestur':isSentSec?'e.g. Hvernig hefur þú það í dag?':'e.g. Góðan daginn'} required/></div>
+          <div className="form-group"><label>English {isVisSec?'word':isSentSec?'equivalent':''}</label><input value={newEn} onChange={e=>setNewEn(e.target.value)} placeholder={isVisSec?'e.g. horse':isSentSec?'e.g. How are you today?':'e.g. Good morning'} required/></div>
+          <div className="form-group"><label>Notes</label><input value={newNote} onChange={e=>setNewNote(e.target.value)} placeholder={isVisSec?'e.g. masculine noun (m.)':isSentSec?'Grammar note (optional)':'Grammar note or example'}/></div>
+          {!isSentSec&&!isVisSec&&(
             <>
               <div className="form-group"><label>Category</label>
                 <div className="level-pills">{['vocabulary','grammar','phrase'].map(c=><button type="button" key={c} className={`pill ${newCat===c?'active':''}`} onClick={()=>setNewCat(c)}>{c}</button>)}</div>
@@ -1833,18 +1952,28 @@ function FlashcardsView(){
 
       {section!=='reference' && mode==='generate'&&(
         <div className="add-card-form">
-          <h3 className="form-title">Generate {isSentSec?'sentences':'cards'} with AI</h3>
-          <div className="form-group"><label>{isSentSec?'Situation / topic':'Topic'}</label>
+          <h3 className="form-title">Generate {isVisSec?'visual cards':isSentSec?'sentences':'cards'} with AI</h3>
+          {isVisSec&&visGenProgress&&(
+            <div className="vis-gen-progress">
+              <div className="vis-gen-bar"><div className="vis-gen-fill" style={{width:`${Math.round(visGenProgress.current/visGenProgress.total*100)}%`}}/></div>
+              <p className="vis-gen-label">Generating images… {visGenProgress.current} / {visGenProgress.total}</p>
+            </div>
+          )}
+          <div className="form-group">
+            <label>{isVisSec?'Topic (concrete nouns only)':isSentSec?'Situation / topic':'Topic'}</label>
             <input value={genTopic} onChange={e=>setGenTopic(e.target.value)}
-              placeholder={isSentSec?'e.g. ordering at a café, asking for directions':'e.g. common greetings and everyday phrases'}/>
+              placeholder={isVisSec?'e.g. kitchen items, animals, transport':isSentSec?'e.g. ordering at a café, asking for directions':'e.g. common greetings and everyday phrases'}/>
           </div>
           <div className="form-group"><label>Count</label><input type="number" min="5" max="30" value={genCount} onChange={e=>setGenCount(parseInt(e.target.value))}/></div>
           <div className="form-group"><label>Level</label>
             <div className="level-pills">{LEVELS.map(l=><button type="button" key={l} className={`pill ${genLevel===l?'active':''}`} onClick={()=>setGenLevel(l)}>{l}</button>)}</div>
           </div>
+          {isVisSec&&<p className="vis-gen-note">Images are generated after the word list. This may take a minute if the SD server is busy.</p>}
           <div className="form-actions">
             <button className="pill" onClick={()=>setMode('browse')}>Cancel</button>
-            <button className="pill active" onClick={handleGenerate} disabled={genLoading}>{genLoading?'Generating…':`Generate ${genCount} ${isSentSec?'sentences':'cards'}`}</button>
+            <button className="pill active" onClick={handleGenerate} disabled={genLoading||!!visGenProgress}>
+              {genLoading||(visGenProgress&&visGenProgress.current<visGenProgress.total)?'Generating…':`Generate ${genCount} ${isVisSec?'visual cards':isSentSec?'sentences':'cards'}`}
+            </button>
           </div>
         </div>
       )}
@@ -1875,8 +2004,35 @@ function FlashcardsView(){
               </div>
             </>
           )}
-          {filtered.length===0&&<div className="empty-state">No {isSentSec?'sentences':'cards'} yet — try Generate!</div>}
-          <div className={isSentSec?'sentence-cards-list':'cards-grid'}>
+          {filtered.length===0&&<div className="empty-state">No {isVisSec?'visual cards':isSentSec?'sentences':'cards'} yet — try Generate!</div>}
+          {isVisSec&&filtered.length>0&&(
+            <div className="vis-cards-grid">
+              {filtered.map(card=>(
+                <div key={card.id} className="vis-card-item">
+                  <div className="vis-card-img-wrap">
+                    {card.image_url
+                      ? <img className="vis-card-img" src={card.image_url} alt={card.english} loading="lazy"/>
+                      : <div className="vis-img-placeholder"><span>No image</span></div>}
+                    <button className="vis-card-refresh" onClick={()=>refreshImage(card.id)}
+                      disabled={refreshingImgId===card.id} title="Generate new image">
+                      {refreshingImgId===card.id?'…':'🔄'}
+                    </button>
+                  </div>
+                  <div className="vis-card-meta">
+                    <p className="vis-card-is icelandic">{card.icelandic}</p>
+                    <p className="vis-card-en">{card.english}</p>
+                    {card.notes&&<p className="card-note">{card.notes}</p>}
+                    <div className="card-stats">
+                      <span>{card.times_seen} seen</span><span>{card.times_correct} correct</span>
+                    </div>
+                  </div>
+                  <button className="delete-btn" onClick={()=>handleDelete(card.id)}><TrashIcon/></button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className={(!isVisSec&&isSentSec)?'sentence-cards-list':(!isVisSec&&!isSentSec)?'cards-grid':''}
+               style={isVisSec?{display:'none'}:{}}>
             {filtered.map(card=>(
               <div key={card.id} className={isSentSec?'sentence-card-item':'card-item'}>
                 {isSentSec?(
