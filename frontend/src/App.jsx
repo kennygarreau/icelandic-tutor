@@ -150,7 +150,6 @@ export default function App(){
   const [dashData,setDashData]=useState(null);
   const TABS=[
     {id:'chat',      icon:<ChatIcon/>,  label:'Chat'},
-    {id:'scenarios', icon:<SceneIcon/>, label:'Scenarios'},
     {id:'lessons',   icon:<BookIcon/>,  label:'Lessons'},
     {id:'drill',     icon:<DrillIcon/>, label:'Drill'},
     {id:'flashcards',   icon:<CardIcon/>,   label:'Cards'},
@@ -198,8 +197,7 @@ export default function App(){
       </nav>
       <main className="main">
         {tab==='chat'       && <ChatView/>}
-        {tab==='scenarios'  && <ScenariosView onStart={(id)=>goChat('scenario',id)}/>}
-        {tab==='lessons'    && <LessonsView   onStart={(id)=>goChat('lesson',id)}/>}
+        {tab==='lessons'    && <LessonsShell onStart={(mode,id)=>goChat(mode,id)}/>}
         {tab==='drill'      && <DrillView/>}
         {tab==='pronunciation' && <PronunciationView/>}
         {tab==='progress'   && <ProgressShell/>}
@@ -1055,6 +1053,20 @@ function ScenariosView({onStart}){
 // ═══════════════════════════════════════════════════════════════════════════════
 // LESSONS VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
+function LessonsShell({onStart}){
+  const [sub,setSub]=useState('lessons');
+  return(
+    <div style={{display:'flex',flexDirection:'column',flex:1,overflow:'hidden'}}>
+      <div className="fc-section-tabs">
+        <button className={`fc-section-tab ${sub==='lessons'?'active':''}`}   onClick={()=>setSub('lessons')}>Lessons</button>
+        <button className={`fc-section-tab ${sub==='scenarios'?'active':''}`} onClick={()=>setSub('scenarios')}>Scenarios</button>
+      </div>
+      {sub==='lessons'   &&<LessonsView   onStart={(id)=>onStart('lesson',id)}/>}
+      {sub==='scenarios' &&<ScenariosView onStart={(id)=>onStart('scenario',id)}/>}
+    </div>
+  );
+}
+
 function LessonsView({onStart}){
   const [lessons,setLessons]=useState([]);
   const [completed,setCompleted]=useState({});
