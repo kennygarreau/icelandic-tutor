@@ -23,6 +23,7 @@ flowchart LR
 
     subgraph external["External"]
         LLM["Ollama / Claude\nLLM backend"]
+        SDAPI["SD API\ndiffusers / SDXL"]
     end
 
     Browser -->|HTTPS| Nginx
@@ -35,6 +36,7 @@ flowchart LR
     Backend -->|grammar context| RAG
     Backend -->|transcription · scoring| Whisper
     Backend -->|streaming JSON| LLM
+    Backend -->|"POST /sdapi/v1/txt2img"| SDAPI
     Backend --- DB
 ```
 
@@ -53,6 +55,12 @@ flowchart LR
 **TTS service** — wraps Piper with the `is_IS-bui-medium` Icelandic voice model. Returns raw WAV audio that the browser plays directly. Voice and speed are configurable via environment variable.
 
 **RAG service** — ingests Icelandic grammar PDFs at startup using `intfloat/multilingual-e5-small` embeddings (CPU-only) into ChromaDB. Exposes a `/query` endpoint used by the backend to retrieve the top-3 most relevant chunks before every LLM call.
+
+**SD API** — external image generation service, called by the backend when creating visual flashcards. The backend POSTs a prompt and generation parameters to `/sdapi/v1/txt2img` and receives a base64-encoded PNG, which it decodes and stores at `/data/images/{card_id}.png` in the `tutor_data` volume. The generated image is then served from `/api/images/{card_id}` through nginx.
+
+The API contract follows the AUTOMATIC1111 WebUI format (`prompt`, `negative_prompt`, `steps`, `width`, `height`, `cfg_scale`), making it compatible with any A1111-compatible server. The bundled implementation (`~/sd-api` on the SD host) wraps the HuggingFace `diffusers` library directly. The recommended model is `stabilityai/stable-diffusion-xl-base-1.0` (SDXL base); parameters are tunable via `SD_STEPS`, `SD_CFG`, `SD_WIDTH`, `SD_HEIGHT` env vars.
+
+An Unsplash fallback is also available (`IMAGE_PROVIDER=unsplash`), which calls the Unsplash random photo endpoint instead and stores the returned CDN URL directly as the `image_url`.
 
 **Ollama / Claude** — the LLM backend, external to the Docker stack. In the primary setup Ollama runs on the same host as the Docker stack (RTX 5080, `host.docker.internal:11434`), serving `mistral-nemo:12b` (fits within the RTX 5080's 16 GB VRAM). Switchable at runtime via `LLM_PROVIDER` env var. Both paths receive the same structured prompt and are expected to return the same JSON schema (Icelandic reply, English correction with error categories, new vocabulary, lesson progress).
 
@@ -81,6 +89,7 @@ Each service was evaluated for whether GPU acceleration provides a meaningful be
 | LLM (Ollama)  | **GPU** | 🔴 Critical | A 12B parameter model on CPU produces ~3–5 tokens/sec; on GPU it produces ~100-120 tokens/sec. Unusable without GPU. |
 | Piper TTS     | CPU    | 🟢 Negligible | Piper synthesises a typical Icelandic sentence in under 100ms on CPU. GPU would save at most a few milliseconds — not perceptible. `use_cuda=False` is intentional. |
 | RAG service   | CPU    | 🟡 Minor | `multilingual-e5-small` is a tiny embedding model; a single query embeds in ~10ms on CPU. GPU would cut this to ~2ms — irrelevant against the LLM latency of several seconds. |
+| SD API        | **GPU** (external) | 🔴 Critical | SDXL base on CPU takes several minutes per image; on GPU (GB10 DGX Spark) it takes ~10s. The service runs on a separate host and is not part of the main Docker stack. |
 | Backend       | CPU    | 🟢 None | Pure I/O-bound orchestration — JSON parsing, SQLite reads, HTTP proxying. No matrix operations. |
 | Frontend      | CPU    | 🟢 None | Static file serving via Nginx. |
 
@@ -92,3 +101,5 @@ The RTX 5080 has 16 GB VRAM. `mistral-nemo:12b` at 4-bit quantization uses ~7–
 - **Why a separate Whisper service:** Isolating the GPU workload into its own container keeps model weights resident in VRAM across requests. Both the transcription and pronunciation scoring endpoints share that one loaded model without paying the load cost twice.
 - **Why support two LLM backends:** Ollama runs entirely offline on the local GPU host, which is the normal path. The Claude API option exists for quality comparison and as a fallback, and adding it required only a second implementation of the same streaming interface.
 - **Why RAG over relying on the LLM alone:** Icelandic grammar is a narrow domain where LLMs hallucinate plausibly but incorrectly. Grounding explanations in actual grammar PDF text produces corrections that are verifiably sourced rather than confabulated.
+- **Why a separate SD API service:** Image generation is GPU-intensive and architecturally unrelated to the language tutor. Keeping it as an external service with a stable A1111-compatible HTTP contract means the model and hardware can be upgraded independently without touching the main stack. The Unsplash fallback provides a zero-GPU path for deployments without a dedicated image generation host.
+- **Why SDXL base over SDXL Turbo for flashcard images:** Turbo's adversarial distillation trains out the need for classifier-free guidance, so it requires `cfg_scale` near zero. At `cfg_scale=7` (the standard value for base models) Turbo completely ignores the text prompt and generates from its prior distribution. SDXL base at `cfg_scale=7` and 25 steps reliably produces clean, correctly-subject product-style images on white backgrounds — which is exactly what flashcard review requires.

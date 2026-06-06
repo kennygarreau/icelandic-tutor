@@ -57,9 +57,15 @@ LITELLM_MODEL   = os.getenv("LITELLM_MODEL",   "ollama/qwen3:32b")
 IMAGE_PROVIDER  = os.getenv("IMAGE_PROVIDER",  "sd")        # sd | unsplash
 SD_URL          = os.getenv("SD_URL",          "http://spark-f73a:7860")
 SD_MODEL        = os.getenv("SD_MODEL",        "")
-SD_PROMPT_TMPL  = os.getenv("SD_PROMPT_TEMPLATE",
+SD_PROMPT_TMPL  = os.getenv("SD_PROMPT_TEMPLATE") or (
     "a clear product-style photograph of {word}, isolated on clean white background, "
     "no text, no labels, no people, educational flashcard, high quality")
+SD_NEG_PROMPT   = os.getenv("SD_NEGATIVE_PROMPT",
+    "text, watermark, letters, words, blurry, low quality, nsfw, people, faces")
+SD_STEPS        = int(os.getenv("SD_STEPS",   "25"))
+SD_CFG          = float(os.getenv("SD_CFG",   "7"))
+SD_WIDTH        = int(os.getenv("SD_WIDTH",   "1024"))
+SD_HEIGHT       = int(os.getenv("SD_HEIGHT",  "1024"))
 UNSPLASH_KEY    = os.getenv("UNSPLASH_ACCESS_KEY", "")
 IMAGES_DIR      = "/data/images"
 os.makedirs(IMAGES_DIR, exist_ok=True)
@@ -792,8 +798,8 @@ async def call_sd(english_word: str, card_id: int) -> str:
     prompt = SD_PROMPT_TMPL.format(word=english_word)
     payload = {
         "prompt": prompt,
-        "negative_prompt": "text, watermark, letters, words, blurry, low quality, nsfw, people, faces",
-        "steps": 20, "width": 512, "height": 512, "cfg_scale": 7,
+        "negative_prompt": SD_NEG_PROMPT,
+        "steps": SD_STEPS, "width": SD_WIDTH, "height": SD_HEIGHT, "cfg_scale": SD_CFG,
     }
     if SD_MODEL:
         payload["override_settings"] = {"sd_model_checkpoint": SD_MODEL}
