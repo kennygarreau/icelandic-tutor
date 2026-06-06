@@ -110,6 +110,7 @@ services:
       context: ./frontend
       args:
         VITE_OTEL_COLLECTOR_URL: ${OTEL_COLLECTOR_URL:-}
+        VITE_MAPTILER_KEY: ${VITE_MAPTILER_KEY:-}
     container_name: icelandic_frontend
     restart: unless-stopped
     depends_on:

@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './App.css';
-import 'leaflet/dist/leaflet.css';
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { tracer, SpanStatusCode } from './telemetry';
-import ICELAND_LOCATIONS from './icelandLocations.js';
 
 const API     = '/api';
 const WHISPER = '/whisper';
@@ -3269,88 +3268,104 @@ function GrammarReferenceView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAP VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-const CAT_COLORS={city:'#3b82f6',nature:'#22c55e',glacier:'#7dd3fc',volcano:'#ef4444',landmark:'#f59e0b'};
-const ALL_CATS=['all','city','nature','glacier','volcano','landmark'];
+const MAPTILER_KEY   = import.meta.env.VITE_MAPTILER_KEY || '';
+const MAPTILER_STYLE = `https://api.maptiler.com/maps/openstreetmap/style.json?key=${MAPTILER_KEY}`;
 
 function MapView(){
-  const [filter,setFilter]=useState('all');
-  const [addedIds,setAddedIds]=useState(new Set());
+  const containerRef = useRef(null);
+  const mapRef       = useRef(null);
+  const [selected,   setSelected]   = useState(null); // {name, nameEn, layerType}
+  const [addedNames, setAddedNames] = useState(new Set());
 
-  const visible=filter==='all'?ICELAND_LOCATIONS:ICELAND_LOCATIONS.filter(l=>l.category===filter);
+  useEffect(()=>{
+    if(!containerRef.current||mapRef.current) return;
 
-  const addFlashcard=async(loc)=>{
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: MAPTILER_STYLE,
+      center: [-18.5, 65.0],
+      zoom: 6,
+      attributionControl: {compact:true},
+    });
+    mapRef.current = map;
+
+    map.on('click', e=>{
+      const features = map.queryRenderedFeatures(e.point);
+      const hit = features.find(f=>f.properties?.name);
+      if(!hit){ setSelected(null); return; }
+      const name    = hit.properties.name;
+      const nameEn  = hit.properties['name:en'] || hit.properties.name_en || null;
+      const layerType = (hit.layer?.id||'').replace(/_/g,' ');
+      playWord(name);
+      setSelected({name, nameEn, layerType});
+    });
+
+    map.on('mousemove', e=>{
+      const features = map.queryRenderedFeatures(e.point);
+      map.getCanvas().style.cursor = features.some(f=>f.properties?.name) ? 'pointer' : '';
+    });
+
+    return ()=>{ map.remove(); mapRef.current=null; };
+  },[]);
+
+  const addFlashcard = async()=>{
+    if(!selected||addedNames.has(selected.name)) return;
     try{
       await fetch(`${API}/flashcards`,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({icelandic:loc.name,english:loc.en,notes:loc.desc,category:'vocabulary',part_of_speech:'proper noun'})});
-      setAddedIds(p=>new Set([...p,loc.id]));
+        body:JSON.stringify({
+          icelandic: selected.name,
+          english:   selected.nameEn||selected.name,
+          notes:     selected.layerType?`Feature type: ${selected.layerType}`:'Icelandic place name',
+          category:  'vocabulary',
+          part_of_speech: 'proper noun',
+        })});
+      setAddedNames(p=>new Set([...p,selected.name]));
     }catch(e){console.error(e);}
   };
 
-  const chatAbout=(loc)=>{
+  const chatAbout = ()=>{
+    if(!selected) return;
+    const prompt = selected.nameEn
+      ? `Tell me about ${selected.name} (${selected.nameEn}) in Iceland. What does the name mean and what should I know about it?`
+      : `Tell me about the place called "${selected.name}" in Iceland. What does the name mean?`;
     goToTab('chat');
-    setTimeout(()=>seedChatInput(`Tell me about ${loc.name} (${loc.en}) in Iceland. What does the name mean and what should I know about it?`),150);
+    setTimeout(()=>seedChatInput(prompt),150);
   };
 
   return(
     <div className="map-view">
       <div className="map-header">
         <h2 className="page-title">Iceland Map</h2>
-        <div className="map-filters">
-          {ALL_CATS.map(c=>(
-            <button key={c} className={`map-filter-btn ${filter===c?'active':''}`} onClick={()=>setFilter(c)}>
-              {c==='all'?'All':c.charAt(0).toUpperCase()+c.slice(1)}
+        <p className="map-hint">Click any place name on the map to hear it pronounced</p>
+      </div>
+      <div className="map-wrap" ref={containerRef}/>
+      {selected&&(
+        <div className="map-info-bar">
+          <div className="map-info-left">
+            <button className="map-speak-btn" onClick={()=>playWord(selected.name)} title="Pronounce again">
+              <SpeakerIcon/>
             </button>
-          ))}
-        </div>
-      </div>
-      <div className="map-wrap">
-        <MapContainer center={[65.0,-18.5]} zoom={6} style={{height:'100%',width:'100%'}}>
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          {visible.map(loc=>(
-            <CircleMarker
-              key={loc.id}
-              center={[loc.lat,loc.lng]}
-              radius={loc.category==='city'?9:6}
-              color={CAT_COLORS[loc.category]||'#888'}
-              fillColor={CAT_COLORS[loc.category]||'#888'}
-              fillOpacity={0.85}
-              weight={2}
+            <div>
+              <div className="map-info-name">{selected.name}</div>
+              {selected.nameEn&&<div className="map-info-en">{selected.nameEn}</div>}
+              {selected.layerType&&<div className="map-info-type">{selected.layerType}</div>}
+            </div>
+          </div>
+          <div className="map-info-actions">
+            <button
+              className={`map-action-btn${addedNames.has(selected.name)?' map-action-added':''}`}
+              onClick={addFlashcard}
+              disabled={addedNames.has(selected.name)}
             >
-              <Tooltip>{loc.name}</Tooltip>
-              <Popup>
-                <div className="map-popup">
-                  <div className="map-popup-header">
-                    <div>
-                      <div className="map-popup-name">{loc.name}</div>
-                      <div className="map-popup-en">{loc.en}</div>
-                    </div>
-                    <button className="map-speak-btn" onClick={()=>playWord(loc.name)} title="Pronounce">
-                      <SpeakerIcon/>
-                    </button>
-                  </div>
-                  <span className={`map-popup-cat map-cat-${loc.category}`}>{loc.category}</span>
-                  {loc.desc&&<p className="map-popup-desc">{loc.desc}</p>}
-                  <div className="map-popup-actions">
-                    <button
-                      className={`map-action-btn${addedIds.has(loc.id)?' map-action-added':''}`}
-                      onClick={()=>addFlashcard(loc)}
-                      disabled={addedIds.has(loc.id)}
-                    >
-                      {addedIds.has(loc.id)?'Added ✓':'+ Flashcard'}
-                    </button>
-                    <button className="map-action-btn map-chat-btn" onClick={()=>chatAbout(loc)}>
-                      Chat about it
-                    </button>
-                  </div>
-                </div>
-              </Popup>
-            </CircleMarker>
-          ))}
-        </MapContainer>
-      </div>
+              {addedNames.has(selected.name)?'Added ✓':'+ Flashcard'}
+            </button>
+            <button className="map-action-btn map-chat-btn" onClick={chatAbout}>
+              Chat about it
+            </button>
+            <button className="map-info-close" onClick={()=>setSelected(null)} title="Dismiss">×</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
