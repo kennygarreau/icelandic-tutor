@@ -41,11 +41,13 @@ let _sessionsCacheTs = 0;
 const SESSIONS_CACHE_TTL = 30_000;
 function invalidateSessionsCache(){ _sessionsCache = null; _sessionsCacheTs = 0; }
 
+let _ttsSpeed=parseFloat(localStorage.getItem('tts_speed')||'0.85');
+
 const playWord=async(text)=>{
   try{
     const r=await fetch(`${TTS}/synthesize`,{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text,speed:parseFloat(localStorage.getItem('tts_speed')||'0.85')})});
+      body:JSON.stringify({text,speed:_ttsSpeed})});
     if(!r.ok)return;
     const blob=await r.blob();
     const url=URL.createObjectURL(blob);
@@ -162,6 +164,8 @@ export default function App(){
   const [tab,setTab]=useState('chat');
   const [showWelcome,setShowWelcome]=useState(false);
   const [dashData,setDashData]=useState(null);
+  const [speed,setSpeed]=useState(_ttsSpeed);
+  const handleSpeedChange=(v)=>{_ttsSpeed=v;setSpeed(v);localStorage.setItem('tts_speed',v);};
   const TABS=[
     {id:'chat',      icon:<ChatIcon/>,  label:'Chat'},
     {id:'lessons',   icon:<BookIcon/>,  label:'Lessons'},
@@ -209,6 +213,12 @@ export default function App(){
             {t.icon}<span>{t.label}</span>
           </button>
         ))}
+        <div className="sidebar-speed">
+          <SpeakerIcon/>
+          <input type="range" min="0.5" max="1.5" step="0.05" value={speed}
+            onChange={e=>handleSpeedChange(parseFloat(e.target.value))}/>
+          <span className="sidebar-speed-val">{speed.toFixed(2)}×</span>
+        </div>
       </nav>
       <main className="main">
         {tab==='chat'       && <ChatView/>}
@@ -253,7 +263,6 @@ function ChatView(){
   const [correction,   setCorrection]   = useState(WELCOME_MSG.correction);
   const [newVocab,     setNewVocab]     = useState([]);
   const [autoPlay,     setAutoPlay]     = useState(true);
-  const [speed,        setSpeed]        = useState(()=>parseFloat(localStorage.getItem('tts_speed')||'0.85'));
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [chatMode,  setChatMode]  = useState({mode:'free',id:null,label:''});
   const [pronScore, setPronScore] = useState(null);
@@ -288,7 +297,7 @@ function ChatView(){
   const speakText=useCallback(async(text,msgId)=>{
     setPlayingId(msgId);
     try{
-      const r=await fetch(`${TTS}/synthesize`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,speed})});
+      const r=await fetch(`${TTS}/synthesize`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,speed:_ttsSpeed})});
       if(!r.ok)throw new Error();
       const blob=await r.blob();const url=URL.createObjectURL(blob);
       const audio=new Audio(url);
@@ -297,7 +306,7 @@ function ChatView(){
       audio.onerror=()=>{setPlayingId(null);URL.revokeObjectURL(url);currentAudioRef.current=null;};
       await audio.play();
     }catch{setPlayingId(null);}
-  },[speed]);
+  },[]);
 
   // Always-current snapshot — sendMessage reads from here so it needs zero deps
   stateRef.current={messages,level,autoPlay,sessionId,chatMode,speakText};
@@ -755,8 +764,6 @@ function ChatView(){
           onSend={sendMessage}
           autoPlay={autoPlay}
           onAutoPlayChange={setAutoPlay}
-          speed={speed}
-          onSpeedChange={v=>{setSpeed(v);localStorage.setItem('tts_speed',v);}}
           inputRef={inputRef}
           currentAudioRef={currentAudioRef}
           onStopAudio={()=>setPlayingId(null)}
@@ -861,7 +868,7 @@ function ChatView(){
 // ═══════════════════════════════════════════════════════════════════════════════
 // CHAT INPUT — isolated so keystrokes never re-render the message list
 // ═══════════════════════════════════════════════════════════════════════════════
-const ChatInput=React.memo(function ChatInput({loading,onSend,autoPlay,onAutoPlayChange,speed,onSpeedChange,inputRef,currentAudioRef,onStopAudio}){
+const ChatInput=React.memo(function ChatInput({loading,onSend,autoPlay,onAutoPlayChange,inputRef,currentAudioRef,onStopAudio}){
   const [input,setInput]=useState('');
   const [recording,setRecording]=useState(false);
   const mediaRecorder=useRef(null);
@@ -944,12 +951,6 @@ const ChatInput=React.memo(function ChatInput({loading,onSend,autoPlay,onAutoPla
       <div className="input-meta">
         <label className="toggle">
           <input type="checkbox" checked={autoPlay} onChange={e=>onAutoPlayChange(e.target.checked)}/>Auto-play
-        </label>
-        <label className="speed-ctrl">
-          Speed
-          <input type="range" min="0.5" max="1.5" step="0.05" value={speed}
-            onChange={e=>onSpeedChange(parseFloat(e.target.value))}/>
-          <span>{speed.toFixed(2)}×</span>
         </label>
       </div>
     </div>
