@@ -892,3 +892,44 @@ input,textarea{font-family:inherit;color:inherit}
 .cqr-icon{font-size:.9rem;flex-shrink:0;margin-top:.05rem}
 .cqr-pts{color:var(--muted);min-width:3rem;flex-shrink:0;font-size:.8rem}
 .cqr-feedback{color:var(--text);flex:1}
+
+/* ── Map View ── */
+.map-view{display:flex;flex-direction:column;flex:1;overflow:hidden}
+.map-header{padding:.8rem 1.2rem .6rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:1rem;flex-wrap:wrap}
+.map-filters{display:flex;gap:.4rem;flex-wrap:wrap}
+.map-filter-btn{padding:.2rem .65rem;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.78rem;font-family:inherit;transition:all var(--tr)}
+.map-filter-btn:hover{border-color:var(--ice);color:var(--ice)}
+.map-filter-btn.active{background:rgba(168,200,232,.12);border-color:var(--ice);color:var(--ice-bright)}
+.map-wrap{flex:1;min-height:0;position:relative}
+.map-wrap .leaflet-container{position:absolute;inset:0;height:100%;width:100%;background:var(--deep)}
+
+/* Override leaflet popup for dark theme */
+.leaflet-popup-content-wrapper{background:var(--raised)!important;border:1px solid var(--border)!important;border-radius:var(--r)!important;box-shadow:0 6px 28px rgba(0,0,0,.6)!important;color:var(--text)!important}
+.leaflet-popup-tip{background:var(--raised)!important}
+.leaflet-popup-content{margin:.75rem .85rem!important;min-width:200px}
+.leaflet-popup-close-button{color:var(--muted)!important;font-size:1rem!important;top:6px!important;right:8px!important}
+.leaflet-popup-close-button:hover{color:var(--text)!important}
+.leaflet-control-attribution{background:rgba(13,18,32,.8)!important;color:var(--muted)!important;font-size:.65rem!important}
+.leaflet-control-attribution a{color:var(--ice)!important}
+.leaflet-tooltip{background:var(--raised);border:1px solid var(--border);color:var(--ice-bright);font-family:'Crimson Pro',Georgia,serif;font-size:.9rem;font-style:italic;padding:.2rem .55rem;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.leaflet-tooltip::before{border-top-color:var(--border)!important}
+
+/* Map popup contents */
+.map-popup{display:flex;flex-direction:column;gap:.55rem}
+.map-popup-header{display:flex;align-items:flex-start;justify-content:space-between;gap:.5rem}
+.map-popup-name{font-size:1.08rem;font-weight:600;color:var(--ice-bright);font-style:italic;font-family:'Crimson Pro',Georgia,serif;line-height:1.2}
+.map-popup-en{font-size:.78rem;color:var(--muted);margin-top:.15rem}
+.map-speak-btn{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;border:1px solid var(--border);color:var(--muted);flex-shrink:0;transition:all var(--tr);background:transparent}
+.map-speak-btn:hover{border-color:var(--aurora-b);color:var(--aurora-b);background:rgba(56,178,232,.08)}
+.map-popup-cat{font-size:.68rem;padding:.1rem .5rem;border-radius:12px;border:1px solid;display:inline-block;text-transform:capitalize;letter-spacing:.03em}
+.map-cat-city{color:#60a5fa;border-color:rgba(96,165,250,.4);background:rgba(96,165,250,.1)}
+.map-cat-nature{color:#4ade80;border-color:rgba(74,222,128,.4);background:rgba(74,222,128,.1)}
+.map-cat-glacier{color:#7dd3fc;border-color:rgba(125,211,252,.4);background:rgba(125,211,252,.1)}
+.map-cat-volcano{color:#f87171;border-color:rgba(248,113,113,.4);background:rgba(248,113,113,.1)}
+.map-cat-landmark{color:#fbbf24;border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.1)}
+.map-popup-desc{font-size:.8rem;color:var(--muted);line-height:1.5;border-top:1px solid var(--border);padding-top:.45rem;margin-top:.1rem}
+.map-popup-actions{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.1rem}
+.map-action-btn{padding:.25rem .65rem;border-radius:20px;border:1px solid var(--border);color:var(--muted);font-size:.76rem;background:transparent;transition:all var(--tr);font-family:inherit;cursor:pointer}
+.map-action-btn:hover:not(:disabled){border-color:var(--ice);color:var(--ice-bright);background:rgba(168,200,232,.08)}
+.map-action-btn.map-action-added{border-color:var(--aurora-g);color:var(--aurora-g);cursor:default}
+.map-chat-btn:hover{border-color:var(--aurora-p)!important;color:var(--aurora-p)!important;background:rgba(155,127,232,.08)!important}

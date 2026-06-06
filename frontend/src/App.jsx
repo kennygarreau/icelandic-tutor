@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './App.css';
+import 'leaflet/dist/leaflet.css';
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import { tracer, SpanStatusCode } from './telemetry';
+import ICELAND_LOCATIONS from './icelandLocations.js';
 
 const API     = '/api';
 const WHISPER = '/whisper';
@@ -31,6 +34,8 @@ let _launchChat = null;
 function launchChat(mode,id){_launchChat?.(mode,id);}
 let _goToTab = null;
 function goToTab(id){_goToTab?.(id);}
+let _seedChatInput = null;
+function seedChatInput(text){_seedChatInput?.(text);}
 
 let _sessionsCache = null;
 let _sessionsCacheTs = 0;
@@ -164,6 +169,7 @@ export default function App(){
     {id:'drill',     icon:<DrillIcon/>, label:'Drill'},
     {id:'flashcards',   icon:<CardIcon/>,   label:'Cards'},
     {id:'library',      icon:<LibraryIcon/>,label:'Library'},
+    {id:'map',          icon:<MapIcon/>,    label:'Map'},
     {id:'pronunciation',icon:<PronIcon/>,  label:'Pronunciation'},
     {id:'progress',  icon:<ChartIcon/>, label:'Progress'},
   ];
@@ -213,6 +219,7 @@ export default function App(){
         {tab==='progress'   && <ProgressShell/>}
         {tab==='flashcards' && <FlashcardsView/>}
         {tab==='library'    && <LibraryView/>}
+        {tab==='map'        && <MapView/>}
       </main>
       <nav className="bottom-nav" id="bottom-nav" style={{display:'none'}}>
         {TABS.map(t=>(
@@ -273,7 +280,8 @@ function ChatView(){
       if(mode==='scenario') fetch(`${API}/scenarios/${id}`).then(r=>r.json()).then(s=>setChatMode(c=>({...c,label:`🎭 ${s.title}`,scenarioData:s})));
       if(mode==='lesson')   fetch(`${API}/lessons/${id}`).then(r=>r.json()).then(l=>setChatMode(c=>({...c,label:`📖 ${l.title}`,lessonData:l})));
     };
-    return()=>{_launchChat=null;};
+    _seedChatInput=(text)=>{setInput(text);setTimeout(()=>inputRef.current?.focus(),80);};
+    return()=>{_launchChat=null;_seedChatInput=null;};
   },[]);
 
   useEffect(()=>{chatEndRef.current?.scrollIntoView({behavior:'smooth'});},[messages]);
@@ -2019,7 +2027,10 @@ function FlashcardsView(){
                     </button>
                   </div>
                   <div className="vis-card-meta">
-                    <p className="vis-card-is icelandic">{card.icelandic}</p>
+                    <div className="card-is-row">
+                      <p className="vis-card-is icelandic">{card.icelandic}</p>
+                      <button className="card-play-btn" onClick={()=>playWord(card.icelandic)} title="Pronounce"><SpeakerIcon/></button>
+                    </div>
                     <p className="vis-card-en">{card.english}</p>
                     {card.notes&&<p className="card-note">{card.notes}</p>}
                     <div className="card-stats">
@@ -2436,6 +2447,7 @@ function LibraryView(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({filename:activeBook.filename,page_num:currentPage,completed:!done})});
     setCompletedPages(prev=>{ const n=new Set(prev); done?n.delete(currentPage):n.add(currentPage); return n; });
+    if(!done && currentPage < activeBook.page_count) goToPage(currentPage+1);
   };
 
   const doSearch=async(e)=>{
@@ -3254,6 +3266,95 @@ function GrammarReferenceView(){
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAP VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+const CAT_COLORS={city:'#3b82f6',nature:'#22c55e',glacier:'#7dd3fc',volcano:'#ef4444',landmark:'#f59e0b'};
+const ALL_CATS=['all','city','nature','glacier','volcano','landmark'];
+
+function MapView(){
+  const [filter,setFilter]=useState('all');
+  const [addedIds,setAddedIds]=useState(new Set());
+
+  const visible=filter==='all'?ICELAND_LOCATIONS:ICELAND_LOCATIONS.filter(l=>l.category===filter);
+
+  const addFlashcard=async(loc)=>{
+    try{
+      await fetch(`${API}/flashcards`,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({icelandic:loc.name,english:loc.en,notes:loc.desc,category:'vocabulary',part_of_speech:'proper noun'})});
+      setAddedIds(p=>new Set([...p,loc.id]));
+    }catch(e){console.error(e);}
+  };
+
+  const chatAbout=(loc)=>{
+    goToTab('chat');
+    setTimeout(()=>seedChatInput(`Tell me about ${loc.name} (${loc.en}) in Iceland. What does the name mean and what should I know about it?`),150);
+  };
+
+  return(
+    <div className="map-view">
+      <div className="map-header">
+        <h2 className="page-title">Iceland Map</h2>
+        <div className="map-filters">
+          {ALL_CATS.map(c=>(
+            <button key={c} className={`map-filter-btn ${filter===c?'active':''}`} onClick={()=>setFilter(c)}>
+              {c==='all'?'All':c.charAt(0).toUpperCase()+c.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="map-wrap">
+        <MapContainer center={[65.0,-18.5]} zoom={6} style={{height:'100%',width:'100%'}}>
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          {visible.map(loc=>(
+            <CircleMarker
+              key={loc.id}
+              center={[loc.lat,loc.lng]}
+              radius={loc.category==='city'?9:6}
+              color={CAT_COLORS[loc.category]||'#888'}
+              fillColor={CAT_COLORS[loc.category]||'#888'}
+              fillOpacity={0.85}
+              weight={2}
+            >
+              <Tooltip>{loc.name}</Tooltip>
+              <Popup>
+                <div className="map-popup">
+                  <div className="map-popup-header">
+                    <div>
+                      <div className="map-popup-name">{loc.name}</div>
+                      <div className="map-popup-en">{loc.en}</div>
+                    </div>
+                    <button className="map-speak-btn" onClick={()=>playWord(loc.name)} title="Pronounce">
+                      <SpeakerIcon/>
+                    </button>
+                  </div>
+                  <span className={`map-popup-cat map-cat-${loc.category}`}>{loc.category}</span>
+                  {loc.desc&&<p className="map-popup-desc">{loc.desc}</p>}
+                  <div className="map-popup-actions">
+                    <button
+                      className={`map-action-btn${addedIds.has(loc.id)?' map-action-added':''}`}
+                      onClick={()=>addFlashcard(loc)}
+                      disabled={addedIds.has(loc.id)}
+                    >
+                      {addedIds.has(loc.id)?'Added ✓':'+ Flashcard'}
+                    </button>
+                    <button className="map-action-btn map-chat-btn" onClick={()=>chatAbout(loc)}>
+                      Chat about it
+                    </button>
+                  </div>
+                </div>
+              </Popup>
+            </CircleMarker>
+          ))}
+        </MapContainer>
+      </div>
+    </div>
+  );
+}
+
 const ChatIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
 const SceneIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>;
 const BookIcon    =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
@@ -3272,3 +3373,4 @@ const DrillIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 const HistoryIcon =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="16" height="16"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg>;
 const LibraryIcon =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="12" y1="6" x2="16" y2="6"/><line x1="12" y1="10" x2="16" y2="10"/></svg>;
 const TrashIcon   =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>;
+const MapIcon     =()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>;
