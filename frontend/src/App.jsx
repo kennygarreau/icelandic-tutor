@@ -45,7 +45,7 @@ const playWord=async(text)=>{
   try{
     const r=await fetch(`${TTS}/synthesize`,{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({text,speed:0.8})});
+      body:JSON.stringify({text,speed:parseFloat(localStorage.getItem('tts_speed')||'0.85')})});
     if(!r.ok)return;
     const blob=await r.blob();
     const url=URL.createObjectURL(blob);
