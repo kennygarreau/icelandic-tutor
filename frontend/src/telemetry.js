@@ -36,7 +36,10 @@ registerInstrumentations({
   instrumentations: [
     new DocumentLoadInstrumentation(),
     new FetchInstrumentation({
-      propagateTraceHeaderCorsUrls: [/.*/],
+      propagateTraceHeaderCorsUrls: [
+        new RegExp(`^${window.location.origin}`),
+        /localhost/,
+      ],
       clearTimingResources: true,
     }),
   ],
